@@ -1,4 +1,6 @@
 import { jidNormalizedUser, type BaileysEventMap, type WASocket } from '@whiskeysockets/baileys';
+import { readdir, rm } from 'node:fs/promises';
+import path from 'node:path';
 import { pino } from 'pino';
 import qrcode from 'qrcode-terminal';
 import { AppError, describeError } from '../domain/errors.js';
@@ -91,15 +93,43 @@ async function closeResult(err: unknown, auth: Auth): Promise<Attempt> {
   return { kind: 'failed', error: new AppError('AUTH_REQUIRED', 'WhatsApp login did not complete (QR expired or connection lost); try again') };
 }
 
-/// True when the auth dir holds a paired device (creds carry `me`).
-export async function isLinked(authDir: string, crypto: SessionCrypto): Promise<boolean> {
-  const auth = await useEncryptedAuthState(authDir, crypto);
-  return !!auth.state.creds.me;
+export type LinkStatus = 'linked' | 'not_linked' | 'unreadable';
+
+/// `unreadable`: files exist but can't be decrypted or parsed (Keychain key changed,
+/// corrupted files). Never treated as `not_linked`: that would silently start blank creds.
+export async function linkStatus(authDir: string, crypto: SessionCrypto): Promise<LinkStatus> {
+  try {
+    const auth = await useEncryptedAuthState(authDir, crypto);
+    return auth.state.creds.me ? 'linked' : 'not_linked';
+  } catch {
+    return 'unreadable';
+  }
 }
 
-/// Deletes the local session files; the phone still lists the device until it is removed there.
-export async function clearLink(authDir: string, crypto: SessionCrypto): Promise<void> {
-  await (await useEncryptedAuthState(authDir, crypto)).clear();
+/// Plain file removal, no decryption: the only way out of an unreadable session.
+/// The phone still lists the old device until it is removed there.
+export async function wipeAuthDir(authDir: string): Promise<void> {
+  let names: string[];
+  try {
+    names = await readdir(authDir);
+  } catch (err) {
+    if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return;
+    throw err;
+  }
+  for (const name of names) await rm(path.join(authDir, name), { recursive: true, force: true });
+}
+
+export type LoginPrep = 'ready' | 'already_linked' | 'unreadable';
+
+/// Decides whether `wasap login` may pair. `force` wipes whatever is there, readable or not.
+export async function prepareLogin(authDir: string, crypto: SessionCrypto, force: boolean): Promise<LoginPrep> {
+  if (force) {
+    await wipeAuthDir(authDir);
+    return 'ready';
+  }
+  const status = await linkStatus(authDir, crypto);
+  if (status === 'linked') return 'already_linked';
+  return status === 'unreadable' ? 'unreadable' : 'ready';
 }
 
 export interface LogoutOptions {
@@ -116,7 +146,14 @@ export type LogoutResult = 'not_linked' | 'remote' | 'local_only';
 /// Unlinks this device from the account, then clears the local session either way:
 /// the user asked to log out, and a half-cleared session is worse than none.
 export async function runLogout(o: LogoutOptions): Promise<LogoutResult> {
-  const auth = await useEncryptedAuthState(o.authDir, o.crypto);
+  let auth: Auth;
+  try {
+    auth = await useEncryptedAuthState(o.authDir, o.crypto);
+  } catch {
+    // Unreadable session: we can't reach WhatsApp without the creds, so clear locally.
+    await wipeAuthDir(o.authDir);
+    return 'local_only';
+  }
   if (!auth.state.creds.me) return 'not_linked';
   // Creds updates during this short connection are not saved: the files are wiped right after.
   const sock = createSocket({ auth: auth.state, logger: pino({ level: 'silent' }), getMessageText: () => null });

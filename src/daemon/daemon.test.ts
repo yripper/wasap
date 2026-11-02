@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -11,6 +12,12 @@ import { AppError } from '../domain/errors.js';
 import { SECRET_ACCOUNTS } from '../secrets/keychain.js';
 import { FakeGateway } from '../testing/fake-gateway.js';
 import { MemorySecretStore } from '../testing/memory-secrets.js';
+import { ChatsRepo } from '../store/chats-repo.js';
+import { openDb } from '../store/db.js';
+import { MessagesRepo } from '../store/messages-repo.js';
+import { useEncryptedAuthState } from '../whatsapp/auth-state.js';
+import { BaileysGateway } from '../whatsapp/gateway.js';
+import { SessionCrypto } from '../whatsapp/session-crypto.js';
 import type { WhatsAppGateway } from '../whatsapp/types.js';
 import { startDaemon } from './daemon.js';
 import { acquireLock } from './lock.js';
@@ -46,7 +53,7 @@ async function start(gatewayFactory: Parameters<typeof startDaemon>[0]['gatewayF
   return d;
 }
 
-async function callTool(port: number, name: string): Promise<{ isError?: boolean; text: string }> {
+async function callTool(port: number, name: string, args: Record<string, unknown> = {}): Promise<{ isError?: boolean; text: string }> {
   const token = await secrets.get(SECRET_ACCOUNTS.bearerToken);
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`), {
     requestInit: { headers: { Authorization: `Bearer ${token}` } },
@@ -54,7 +61,7 @@ async function callTool(port: number, name: string): Promise<{ isError?: boolean
   const client = new Client({ name: 'test', version: '1.0.0' });
   await client.connect(transport);
   try {
-    const r = (await client.callTool({ name, arguments: {} })) as { isError?: boolean; content: { type: string; text: string }[] };
+    const r = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: { type: string; text: string }[] };
     return { isError: r.isError, text: r.content[0]?.text ?? '' };
   } finally {
     await client.close();
@@ -127,5 +134,37 @@ describe('startDaemon', () => {
     expect(d.port).toBeGreaterThan(0);
     expect(seen.getMessageText?.(LID, 'M1')).toBe('hi');
     expect(seen.getMessageText?.(DM, 'missing')).toBeNull();
+  });
+
+  it('serves logged_out without touching the files when the session cannot be decrypted', async () => {
+    const auth = await useEncryptedAuthState(paths.authDir, new SessionCrypto(randomBytes(32)));
+    auth.state.creds.me = { id: '111:1@s.whatsapp.net' };
+    await auth.saveCreds();
+    const snapshot = (): Record<string, string> =>
+      Object.fromEntries(readdirSync(paths.authDir).map((n) => [n, readFileSync(join(paths.authDir, n)).toString('hex')]));
+    const before = snapshot();
+
+    const wrongKey = new SessionCrypto(randomBytes(32));
+    const d = await start(async ({ getMessageText }) =>
+      BaileysGateway.start({ authDir: paths.authDir, crypto: wrongKey, getMessageText, logger: pino({ level: 'silent' }) }),
+    );
+
+    const status = JSON.parse((await callTool(d.port, 'status')).text) as Record<string, unknown>;
+    expect(status).toMatchObject({ connection: 'logged_out' });
+
+    // A stored chat, so send_message gets past requireChat and reaches the gateway.
+    const db = openDb(paths.db);
+    new ChatsRepo(db, () => 'normal').upsert({ id: DM, kind: 'dm' }, 1700000000);
+    new MessagesRepo(db).insertMany([
+      { chatId: DM, waId: 'M1', fromMe: false, senderJid: null, ts: 1700000000, text: 'hello', mediaKind: null, quotedId: null, sentViaWasap: false },
+    ]);
+    db.close();
+    const sent = await callTool(d.port, 'send_message', { chat_id: DM, text: 'hi' });
+    expect(sent.isError).toBe(true);
+    expect(sent.text).toMatch(/^LOGGED_OUT: .*login --force/);
+
+    await d.stop();
+    running = null;
+    expect(snapshot()).toEqual(before);
   });
 });

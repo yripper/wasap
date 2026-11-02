@@ -35,7 +35,7 @@ export interface DaemonOptions {
   config: Config;
   secrets: SecretStore;
   logger: Logger;
-  /// Throws AppError('AUTH_REQUIRED') when no device is linked; the daemon then serves unlinked.
+  /// Throws AppError('AUTH_REQUIRED') when no device is linked or the session is unreadable; the daemon then serves unlinked.
   gatewayFactory: (ctx: GatewayContext) => Promise<WhatsAppGateway>;
 }
 
@@ -108,9 +108,10 @@ async function startGateway(o: DaemonOptions, store: Store): Promise<WhatsAppGat
     return await o.gatewayFactory({ getMessageText });
   } catch (e) {
     if (!(e instanceof AppError && e.code === 'AUTH_REQUIRED')) throw e;
-    // Not linked must not exit: pm2 would crash-loop. Serve the store and status instead.
-    o.logger.warn('WhatsApp is not linked: run `pm2 stop wasap && wasap login && pm2 start wasap`');
-    return createUnlinkedGateway();
+    // Not linked, or a session we can't decrypt: exiting would make pm2 crash-loop.
+    // Serve the store and status instead; the auth files are left as they are.
+    o.logger.warn(`whatsapp unavailable: ${describeError(e)}`);
+    return createUnlinkedGateway(e.message);
   }
 }
 

@@ -50,6 +50,10 @@ export function createSocket(d: SocketDeps): WASocket {
   });
 }
 
+export const NOT_LINKED = 'WhatsApp is not linked: run `pm2 stop wasap && wasap login && pm2 start wasap`';
+export const UNREADABLE_SESSION =
+  'the WhatsApp session cannot be decrypted (Keychain key changed or files corrupted): run `pm2 stop wasap && wasap login --force && pm2 start wasap`';
+
 export interface GatewayOptions {
   authDir: string;
   crypto: SessionCrypto;
@@ -81,9 +85,16 @@ export class BaileysGateway implements WhatsAppGateway {
 
   /// Resolves once the socket is created, not when it opens: the daemon must come
   /// up (and serve the store) even while WhatsApp is unreachable.
+  /// Throws AUTH_REQUIRED both when never linked and when the session can't be
+  /// decrypted; the files are left untouched in the latter case (never blank creds).
   static async start(o: GatewayOptions): Promise<BaileysGateway> {
-    const auth = await useEncryptedAuthState(o.authDir, o.crypto);
-    if (!auth.state.creds.me) throw new AppError('AUTH_REQUIRED', 'WhatsApp is not linked; run `wasap login` first');
+    let auth: Auth;
+    try {
+      auth = await useEncryptedAuthState(o.authDir, o.crypto);
+    } catch (err) {
+      throw new AppError('AUTH_REQUIRED', `${UNREADABLE_SESSION} (${describeError(err)})`);
+    }
+    if (!auth.state.creds.me) throw new AppError('AUTH_REQUIRED', NOT_LINKED);
     const gw = new BaileysGateway(o, auth);
     gw.connect();
     return gw;

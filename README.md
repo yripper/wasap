@@ -20,7 +20,7 @@ pnpm install && pnpm build
 node dist/cli.js login
 ```
 
-`login` prints a QR code in the terminal. On your phone open WhatsApp > Settings > Linked devices > Link a device, and scan it. The command exits once the link is open. If this computer is already linked, `login` refuses; `login --force` deletes the old session and pairs again. Use `pnpm link --global` if you want a `wasap` command instead of `node dist/cli.js`.
+`login` prints a QR code in the terminal. On your phone open WhatsApp > Settings > Linked devices > Link a device, and scan it. The command exits once the link is open. If this computer is already linked, `login` refuses; `login --force` deletes the old session (even one that can't be decrypted) and pairs again. `--force` only deletes the local files: the old device stays in your phone's Linked devices list until you remove it there. Use `pnpm link --global` if you want a `wasap` command instead of `node dist/cli.js`.
 
 After linking, your phone sends your chat history to the daemon in the background. Depending on how much history you have, the first sync can take a while.
 
@@ -100,6 +100,7 @@ node dist/cli.js logout
 ## Troubleshooting
 
 - **`status` shows `logged_out`:** there is no valid link (never linked, logged out, or removed from the phone's Linked devices). The daemon stays up, local reads and `status` still answer, and WhatsApp tools return `LOGGED_OUT`. Run `pm2 stop wasap && node dist/cli.js login --force && pm2 start wasap`.
+- **The session can't be decrypted** (`pm2 logs wasap` shows `the WhatsApp session cannot be decrypted`, `status` shows `logged_out`, and `login` refuses with the same reason): the Keychain key under service `wasap` changed or was deleted, or the files in `~/.wasap/auth/` are corrupted. The daemon keeps serving local reads and never overwrites those files. Run `pm2 stop wasap && node dist/cli.js login --force && pm2 start wasap` to delete them and link again, then remove the old entry from your phone's Linked devices (`--force` can't do that for you).
 - **`status` shows `gave_up`:** WhatsApp refused the connection in a way retrying won't fix (for example another client replaced this session), or reconnects ran out. `pm2 logs wasap` names the reason. Check your phone, then `pm2 restart wasap`.
 - **"already running":** run `pm2 stop wasap` before `login` or `logout`, then start it again afterwards.
 - **Port in use:** set `port` in `~/.wasap/config.json` (1024-65535, default 7778), then `pm2 restart wasap` and re-run `wasap token` for the new URL.

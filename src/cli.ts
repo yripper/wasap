@@ -10,7 +10,7 @@ import { connectionSnippets } from './daemon/snippets.js';
 import { ensureBearerToken } from './daemon/token.js';
 import { Keychain } from './secrets/keychain.js';
 import { BaileysGateway } from './whatsapp/gateway.js';
-import { clearLink, isLinked, runLogin, runLogout } from './whatsapp/login.js';
+import { prepareLogin, runLogin, runLogout } from './whatsapp/login.js';
 import { loadOrCreateAuthKey } from './whatsapp/session-crypto.js';
 
 const USAGE = `usage: wasap <command>
@@ -36,14 +36,17 @@ async function login(force: boolean): Promise<void> {
   await withLock(paths, async () => {
     const keychain = new Keychain();
     const crypto = await loadOrCreateAuthKey(keychain);
-    if (await isLinked(paths.authDir, crypto)) {
-      if (!force) {
-        stdout.write('Already linked. Run `wasap login --force` to replace the link, or `wasap logout` first.\n');
-        process.exitCode = 1;
-        return;
-      }
-      await clearLink(paths.authDir, crypto);
+    const prep = await prepareLogin(paths.authDir, crypto, force);
+    if (prep !== 'ready') {
+      stdout.write(
+        prep === 'already_linked'
+          ? 'Already linked. Run `wasap login --force` to replace the link, or `wasap logout` first.\n'
+          : 'The stored WhatsApp session cannot be decrypted (Keychain key changed or files corrupted). Run `wasap login --force` to delete it and link again.\n',
+      );
+      process.exitCode = 1;
+      return;
     }
+    if (force) stdout.write('Any previous session was deleted. If this computer still shows under Linked devices on your phone, remove it there.\n');
     stdout.write('Open WhatsApp on your phone > Settings > Linked devices > Link a device, and scan:\n');
     await runLogin({ authDir: paths.authDir, crypto, print: (s: string) => stdout.write(`${s}\n`) });
     await ensureBearerToken(keychain);
