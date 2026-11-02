@@ -14,6 +14,7 @@ import type { Logger } from '../daemon/logger.js';
 import { AppError, describeError } from '../domain/errors.js';
 import { chatKind, toMuteMs } from './adapt.js';
 import { useEncryptedAuthState } from './auth-state.js';
+import { quietBaileysLogger } from './baileys-logger.js';
 import { nextDelayMs } from './backoff.js';
 import { ReconnectController } from './connection.js';
 import { closeReason, guardEvents, mapChats, mapContacts, mapGroups, mapHistorySet, mapMessages } from './events.js';
@@ -29,10 +30,9 @@ export interface SocketDeps {
 /// Shared by the daemon and `wasap login`: history-related options must match at
 /// pairing time, because the companion registration tells the phone how much history to send.
 export function createSocket(d: SocketDeps): WASocket {
-  // Baileys logs at debug/trace include full message objects; `warn` keeps them out.
-  // A quieter parent (e.g. silent during login) stays quieter.
-  const level = d.logger.levelVal > (d.logger.levels.values.warn ?? 40) ? d.logger.level : 'warn';
-  const baileysLogger = d.logger.child({ module: 'baileys' }, { level });
+  // Baileys' logs carry JIDs, names and raw stanzas: only scrubbed warn/error
+  // messages get through (see baileys-logger.ts). A silent parent stays silent.
+  const baileysLogger = quietBaileysLogger(d.logger);
   return makeWASocket({
     auth: { creds: d.auth.creds, keys: makeCacheableSignalKeyStore(d.auth.keys, baileysLogger) },
     logger: baileysLogger,

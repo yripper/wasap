@@ -19,6 +19,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 | `src/whatsapp/backoff.ts` | Reconnect delay schedule |
 | `src/whatsapp/connection.ts` | `ReconnectController`: reconnect policy (stable-open reset, never gives up on retry-class closes), Baileys-free |
 | `src/whatsapp/events.ts` | Pure Baileys event payload to `WaEvent[]` mapping, `closeReason` |
+| `src/whatsapp/baileys-logger.ts` | `quietBaileysLogger`: the privacy-scrubbing logger handed to Baileys |
 | `src/whatsapp/gateway.ts` | `createSocket` (shared socket options) and `BaileysGateway` |
 | `src/whatsapp/login.ts` | `runLogin` (QR pairing in the terminal), `linkStatus`, `wipeAuthDir`, `prepareLogin`, `runLogout` |
 | `src/testing/fake-gateway.ts` | `FakeGateway`: records calls (including `stop`), `emit(e)` pushes events |
@@ -56,7 +57,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
   - `syncFullHistory: true` + `browser: Browsers.macOS('Desktop')`: Baileys only sets the desktop `webSubPlatform` when both hold (`Utils/validate-connection.ts` `getWebInfo`), which makes the phone send full history instead of ~3 months. `syncFullHistory` is also sent as `requireFullSync` in the pairing payload, so login must use the same options (hence the shared builder).
   - `shouldSyncHistoryMessage: () => true`: process every history chunk type.
   - `getMessage`: returns `{ conversation: text }` from the store so retry receipts (peer asks us to re-encrypt a sent message) work; `undefined` when unknown.
-  - `logger`: child at `warn` (or the parent's level if quieter); Baileys' debug/trace logs contain full message objects.
+  - `logger`: `quietBaileysLogger(parent)` (`baileys-logger.ts:35`). Baileys' own warn/error calls carry JIDs, push names and whole decoded stanzas (`binaryNodeToString` in `Socket/messages-recv`) in the merge object and sometimes JIDs in the message string, and pino child loggers can't take `hooks`. So the wrapper drops trace/debug/info, drops the merge object (keeping only an error's class name as `errName`), masks JIDs as `[jid]` and digit runs of 5+ as `[num]` in the message, and returns itself from `child()` (child bindings carry JIDs too). The parent's level still applies, so login's silent logger stays silent. Chosen over `silent` so a decrypt/sync failure still leaves a level + reason line in `pm2 logs`.
 - Event processing (`connect`, `gateway.ts:192`): each `ev.process` batch runs three steps, each wrapped in `guardEvents` (`events.ts:105`): creds save, data mapping (`handleData` `gateway.ts:216`), connection handling. Baileys' `ev.process` awaits the handler without catching (`Utils/event-buffer.ts` `process`), so an uncaught throw would be an unhandledRejection that crashes the daemon. A failure is logged at `error` with `describeError` only, and one failed step doesn't skip the others (a bad creds write must not hide a close).
 - Event mapping (`events.ts`):
   - `messaging-history.set` → `mapHistorySet` (`events.ts:49`): `aliases` (from `lidPnMappings` when present, else chats' `lidJid`/`pnJid`, plus contacts' lid/pn; deduped), `contacts`, `chats` (history source), `messages`, then edit/revoke events. Aliases go first so ids can be resolved before storing.
