@@ -30,13 +30,13 @@ The MCP server Claude talks to: Streamable HTTP on `127.0.0.1` with bearer-token
 - `ok(data)` (`result.ts:4`), `fail(e)` (`result.ts:10`), `run(fn)` (`result.ts:16`): errors come back as `isError: true` with `CODE: message` (plus `(retry after Ns)`).
 
 - `buildServer(deps, instructions)` (`server.ts:30`); `ToolDeps { actions, db, voice, contacts, status }` (`server.ts:22`); `StatusReport { connection, lastEventAt, chats, messages, pending }` (`server.ts:14`).
-- `buildInstructions(style)` (`instructions.ts:33`) appends `## Writing style\n\n<style>` to `BASE_INSTRUCTIONS` (`instructions.ts:5`); `readStyleGuide(path)` (`instructions.ts:39`) reads `~/.wasap/style.md`, null if missing or blank.
+- `buildInstructions(style)` (`instructions.ts:34`) appends `## Writing style\n\n<style>` to `BASE_INSTRUCTIONS` (`instructions.ts:5`); `readStyleGuide(path)` (`instructions.ts:40`) reads `~/.wasap/style.md`, null if missing or blank.
 
 ### Tools (24)
 
 | Group | Tools | Annotations |
 |---|---|---|
-| read (`read.ts`) | `status`, `list_chats`, `get_pending`, `read_history` (limit <= 100, `before_seq` = seq of the oldest message already seen; keyset on `(ts, seq)`, see store.md), `search_messages`, `get_chat_info` | `READ` |
+| read (`read.ts`) | `status`, `list_chats`, `get_pending` (returns `{ connection, items }`; `connection` is `gateway.state()` so Claude can warn that a non-open mirror may be stale), `read_history` (limit <= 100, `before_seq` = seq of the oldest message already seen; keyset on `(ts, seq)`, see store.md), `search_messages`, `get_chat_info` | `READ` |
 | tracking (`tracking.ts`) | `snooze` (ISO with offset, future), `unsnooze`, `set_watch_level`, `set_category` | `LOCAL_WRITE` |
 | voice (`voice.ts`) | `get_voice`, `get_my_messages` (exactly one of `chat_id` / `category`, limit <= 200), `list_stale_profiles` (`READ`); `save_profile` (body <= 4000), `save_chat_notes` (body <= 2000) (`LOCAL_WRITE`) | |
 | messaging (`messaging.ts`) | `send_message` (also marks read), `mark_read` | `WHATSAPP_WRITE` |
@@ -64,7 +64,7 @@ All `chat_id` params are JID strings. `category` is lowercase, <= 32 chars, `/^[
 - **Read tools never touch the gateway and never mark anything read**; only `mark_read` and `send_message` do (tested in `server.test.ts`).
 - `get_voice` returns own messages only, filtered in SQL (`MessagesRepo.outgoing(..., { textOnly: true })`: `from_me`, not deleted, non-empty text) so the limits count usable samples: `my_messages_in_chat` (<= 60) when `needsLearning` or `notesStale`, `my_messages_in_category` (<= 40, all chats in the category) when `needsLearning`.
 - `cleanup_apply` takes the ids to leave (`chat_ids`), not exclusions; ids outside the plan land in `failed`.
-- `BASE_INSTRUCTIONS` includes the base writing style (Chilean Spanish, no voseo, short, no sign-offs, no em dashes); the optional `style.md` is appended on top.
+- `BASE_INSTRUCTIONS` tells Claude to warn that data may be stale when `get_pending`'s `connection` is not `open`. It includes the base writing style (Chilean Spanish, no voseo, short, no sign-offs, no em dashes); the optional `style.md` is appended on top.
 - Zod input errors come back as SDK "Input validation error", not `VALIDATION:`; action-level validation uses `AppError('VALIDATION')`.
 
 ## Testing

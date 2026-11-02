@@ -43,14 +43,15 @@ export function registerReadTools(server: McpServer, d: ToolDeps): void {
     'get_pending',
     {
       description:
-        "WhatsApp's unread list: chats marked unread, DMs with unread messages and groups on full watch with unread messages. Excludes archived, muted-watch and snoozed chats. Marked-unread first, then full watch, then newest first. Each item carries the reason and the latest incoming message.",
+        "WhatsApp's unread list: chats marked unread, DMs with unread messages and groups on full watch with unread messages. Excludes archived, muted-watch and snoozed chats. Marked-unread first, then full watch, then newest first. Each item carries the reason and the latest incoming message. Returns { connection, items }: connection is the live WhatsApp state; anything but open means the mirror may be stale.",
       inputSchema: { limit: z.number().int().min(1).max(100).default(30) },
       annotations: READ,
     },
     (a) =>
       run(() => {
         const now = d.actions.now();
-        return listPending(d.db, now, a.limit).map((p) => formatPending(p, now));
+        // The connection rides along so a stale mirror is never triaged as if it were live.
+        return { connection: d.actions.gateway.state(), items: listPending(d.db, now, a.limit).map((p) => formatPending(p, now)) };
       }),
   );
 

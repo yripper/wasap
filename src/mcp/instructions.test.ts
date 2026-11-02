@@ -31,6 +31,10 @@ describe('buildInstructions', () => {
     }
   });
 
+  it('warns about stale data when the connection is not open', () => {
+    expect(BASE_INSTRUCTIONS).toContain("If get_pending's connection is not open, tell the user the data may be stale before triaging.");
+  });
+
   it('covers triage, watch levels, media and destructive tools', () => {
     for (const s of ['needsLearning', 'save_profile', 'save_chat_notes', 'set_category', 'marked unread', 'mark_read', 'snooze', 'full', 'never change watch levels in bulk', '[audio]', 'leave_group', 'cleanup_apply']) {
       expect(BASE_INSTRUCTIONS.toLowerCase()).toContain(s.toLowerCase());

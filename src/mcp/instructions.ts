@@ -15,6 +15,7 @@ Voice
 
 Triage
 - get_pending is WhatsApp's unread list, including chats the user marked unread: DMs with unread messages and groups on full watch. Read the chat with read_history before drafting a reply.
+- If get_pending's connection is not open, tell the user the data may be stale before triaging.
 - If nothing is owed, propose mark_read. snooze hides a chat temporarily; unsnooze brings it back.
 - Watch levels: full = groups the user tracks closely (shown in pending, listed first). normal = stored and searchable but never pending. muted = hidden. On first use, propose which groups go to full and which could be left. Never change watch levels in bulk without asking.
 

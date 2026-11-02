@@ -79,9 +79,15 @@ describe('MCP tools', () => {
   });
 
   it('get_pending returns the marked-unread group with its latest incoming message', async () => {
-    const pending = await json<unknown[]>('get_pending');
-    expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ id: GROUP, reason: 'marked_unread', latest_incoming: { text: '[audio]', from: { jid: '222@lid' } } });
+    const { connection, items } = await json<{ connection: string; items: unknown[] }>('get_pending');
+    expect(connection).toBe('open');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: GROUP, reason: 'marked_unread', latest_incoming: { text: '[audio]', from: { jid: '222@lid' } } });
+  });
+
+  it('get_pending reports a non-open connection so stale data is visible', async () => {
+    made.t.gateway.connection = 'reconnecting';
+    expect((await json<{ connection: string }>('get_pending')).connection).toBe('reconnecting');
   });
 
   it('reading never marks anything read or calls the gateway', async () => {
@@ -90,7 +96,7 @@ describe('MCP tools', () => {
     await call('search_messages', { query: 'hello' });
     await call('get_voice', { chat_id: GROUP });
     expect(made.t.gateway.calls).toEqual([]);
-    expect((await json('get_pending'))).toHaveLength(1);
+    expect((await json<{ items: unknown[] }>('get_pending')).items).toHaveLength(1);
   });
 
   it('read_history is newest first and paginates by seq', async () => {
@@ -111,7 +117,7 @@ describe('MCP tools', () => {
     expect(res).toMatchObject({ markedRead: true });
     expect(made.t.gateway.callsTo('sendText')).toHaveLength(1);
     expect(made.t.gateway.callsTo('markRead')).toHaveLength(1);
-    expect(await json('get_pending')).toEqual([]);
+    expect((await json<{ items: unknown[] }>('get_pending')).items).toEqual([]);
   });
 
   it('rejects invalid input without sending', async () => {
@@ -186,9 +192,9 @@ describe('MCP tools', () => {
 
   it('snooze hides a chat from pending and unsnooze restores it', async () => {
     expect((await call('snooze', { chat_id: GROUP, until: FUTURE })).isError).toBe(false);
-    expect(await json('get_pending')).toEqual([]);
+    expect((await json<{ items: unknown[] }>('get_pending')).items).toEqual([]);
     await call('unsnooze', { chat_id: GROUP });
-    expect(await json('get_pending')).toHaveLength(1);
+    expect((await json<{ items: unknown[] }>('get_pending')).items).toHaveLength(1);
     expect((await call('snooze', { chat_id: GROUP, until: '1970-01-01T00:00:00Z' })).text.startsWith('VALIDATION:')).toBe(true);
   });
 
