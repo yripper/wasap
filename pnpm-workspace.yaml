@@ -1,0 +1,6 @@
+# Native build scripts are blocked by default; allow only what is needed.
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  '@whiskeysockets/baileys': false
+  protobufjs: false
