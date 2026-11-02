@@ -11,3 +11,4 @@ Living docs, one per module. **Read the relevant doc before modifying a module; 
 | [daemon.md](daemon.md) | `src/daemon/` | Single-instance lock, logger, background loop, bearer token and connection snippets. |
 | [store.md](store.md) | `src/store/` | SQLite schema and repos: chats, messages (FTS), JID aliases, contacts, audit, cleanup plans. |
 | [whatsapp.md](whatsapp.md) | `src/whatsapp/` | Baileys boundary: event adapters, encrypted auth state, live gateway with bounded reconnect, QR login. |
+| [sync.md](sync.md) | `src/sync/` | Applies gateway events to the store with LID/phone alias canonicalization. |
