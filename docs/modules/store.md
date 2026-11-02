@@ -28,7 +28,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 - `openDb(file)` (`db.ts:6`), `migrate(db)` (`db.ts:14`).
 - `new ChatsRepo(db, defaultWatch: (kind) => WatchLevel)` (`chats-repo.ts:34`): `upsert`, `applyUnread`, `get`, `list`, `setWatchLevel`, `setCategory`, `setSnooze`, `setArchived`, `setWaMuted`, `touchLastMessage`, `mergeInto`.
 - `new MessagesRepo(db)` (`messages-repo.ts:39`): `insertMany`, `editText`, `softDelete`, `history`, `search`, `latestKey`, `outgoing`, `countOutgoingSince`, `getText`.
-- `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:31`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:14`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
+- `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:28`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:14`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
 - `new AliasesRepo(db)`, `new ContactsRepo(db)`, `new AuditRepo(db)`, `new CleanupPlansRepo(db)`.
 
 ## Key methods
@@ -49,7 +49,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 
 - **Unread storage:** `unread_count` is never negative. `markedUnread` is its own column. `live` signals (chats.update): `-1` sets marked and leaves the count; positive values are increments added to `max(count, 0)` and leave marked alone; `0` zeroes the count and clears marked; `null` is a no-op. `absolute` signals (history sync, chats.upsert): count = `max(count, 0)`, marked = given flag OR `count < 0`.
 - **Merge rule (`mergeInto(from, into)`):** messages move with `UPDATE OR IGNORE` on `(chat_id, wa_id)`, leftovers (duplicates) are deleted. The surviving row is `into`, but `watch_level`, `category`, `snooze_until` come from whichever row has the older `created_at` (tie: `into`), and `created_at` becomes the older one. Unread is summed, `marked_unread` ORed, `last_msg_*` taken from the newer row. If `into` does not exist, `from` is renamed. FTS stays consistent because only `chat_id` changes on moved rows and deleted duplicates fire the delete trigger.
-- **Pending query** (`pending-query.ts:12`) is one SQL statement mirroring `pendingReason`, no JS filtering; order is marked_unread, then watch `full`, then `last_msg_ts` desc (nulls last, then id). `lastIncoming` is one extra query per item (newest `from_me = 0`, non-deleted, by `ts` then `seq`), served by `messages_chat_from_me_ts`.
+- **Pending query** (`pending-query.ts:14`) is one SQL statement mirroring `pendingReason`, no JS filtering; order is marked_unread, then watch `full`, then `last_msg_ts` desc (nulls last, then id). `lastIncoming` is one extra query per item (newest `from_me = 0`, non-deleted, by `ts` then `seq`), served by `messages_chat_from_me_ts`.
 - `chats.category` defaults to `'general'` (`schema.ts`, migration 0); only `setCategory` changes it.
 - `last_msg_ts` is forward-only (`ts >= current`), so backfill can't regress it.
 - `latestKey` orders by `ts`, `history` by `seq` (backfilled rows get later seqs).
