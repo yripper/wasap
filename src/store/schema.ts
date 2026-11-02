@@ -12,7 +12,7 @@ export const MIGRATIONS: readonly string[] = [
     archived INTEGER NOT NULL DEFAULT 0,
     wa_muted_until INTEGER,
     watch_level TEXT NOT NULL,
-    category TEXT NOT NULL DEFAULT 'none',
+    category TEXT NOT NULL DEFAULT 'general',
     snooze_until INTEGER,
     last_msg_ts INTEGER,
     last_msg_from_me INTEGER,

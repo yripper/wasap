@@ -26,6 +26,7 @@ describe('ChatsRepo', () => {
     repo.upsert({ id: DM, kind: 'dm' }, 10);
     repo.upsert({ id: GROUP, kind: 'group' }, 10);
     expect(repo.get(DM)?.watchLevel).toBe('normal');
+    expect(repo.get(DM)?.category).toBe('general');
     expect(repo.get(GROUP)?.watchLevel).toBe('muted');
     expect(repo.get('nope@s.whatsapp.net')).toBeNull();
   });
