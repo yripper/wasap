@@ -62,6 +62,13 @@ export class MessagesRepo {
     })(rows);
   }
 
+  /// After an alias merge, the loser's sender id becomes the winner's. The FTS
+  /// trigger fires on text only, so this leaves the index alone.
+  repointSender(from: string, to: string): void {
+    if (from === to) return;
+    this.db.prepare('UPDATE messages SET sender_jid = ? WHERE sender_jid = ?').run(to, from);
+  }
+
   editText(chatId: string, waId: string, text: string, editedAt: number): void {
     this.db
       .prepare('UPDATE messages SET text = ?, edited_at = ? WHERE chat_id = ? AND wa_id = ? AND deleted_at IS NULL')

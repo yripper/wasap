@@ -23,7 +23,7 @@ Applies gateway `WaEvent`s to the store: chats, messages, contacts and LID/phone
 ## Key methods
 
 - `Sink.apply` (`sink.ts:38`): `connection` events only update `connection()` (initial `'connecting'`) and don't touch `lastEventAt()`. Every other event runs in one `db.transaction`; a throw rolls back, propagates (the gateway guard logs it) and leaves `lastEventAt()` unchanged. `lastEventAt()` is `now()` after the last applied non-connection event.
-- `Sink.linkAlias` (`sink.ts:72`): resolves both forms first, picks the winner with `chooseCanonical` on the resolved canonicals, `chats.mergeInto(loser, winner)` when both chats exist, `aliases.repoint(loser, winner)`, then adds both raw forms pointing straight at the winner.
+- `Sink.linkAlias` (`sink.ts:72`): resolves both forms first, picks the winner with `chooseCanonical` on the resolved canonicals, `chats.mergeInto(loser, winner)` when both chats exist, `aliases.repoint(loser, winner)`, `messages.repointSender(loser, winner)` rewrites stored `sender_jid`, `contacts.copyIfMissing` carries names from the loser and both raw forms to the winner (never overwriting), then adds both raw forms pointing straight at the winner.
 - `Sink.applyChat` (`sink.ts:101`): id resolved; upsert (null title/archived become `undefined` = keep; `ChatsRepo.upsert` also COALESCEs the title); `setWaMuted` only when `mutedUntil !== undefined`; `applyUnread` only when `unread` is non-null.
 - `Sink.applyMessages` (`sink.ts:109`): senders paired via `senderAltJid` first (`linkSender`, `sink.ts:128`), then chat and sender ids resolved, placeholder chat upserted (`chatKind`), `insertMany` with `sentViaWasap: false`.
 - `edit`/`revoke` resolve the chat id, then `editText`/`softDelete`.
@@ -39,6 +39,7 @@ Applies gateway `WaEvent`s to the store: chats, messages, contacts and LID/phone
 - A sender pair counts only when exactly one JID ends in `@lid` and the other in `@s.whatsapp.net`.
 - `chats` events from groups after open carry `unread: null` and a title; a null title never wipes a stored one.
 - Messages in this sink are never `sentViaWasap`; outbound sends are recorded by the send path, and the `INSERT OR IGNORE` on `(chat_id, wa_id)` keeps echoes from duplicating.
+- Sender names join `contacts` by exact jid, so a name that arrived before the alias is copied to the winner on merge; stored `messages.sender_jid` is rewritten to the winner too (no person under two ids).
 - Never log message content.
 
 ## Testing

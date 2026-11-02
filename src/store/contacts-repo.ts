@@ -12,4 +12,10 @@ export class ContactsRepo {
     const r = this.db.prepare('SELECT name FROM contacts WHERE jid = ?').get(jid) as { name: string } | undefined;
     return r?.name ?? null;
   }
+
+  /// Carries a name across an alias merge without overwriting one the target already has.
+  copyIfMissing(from: string, to: string): void {
+    if (from === to) return;
+    this.db.prepare('INSERT OR IGNORE INTO contacts (jid, name) SELECT ?, name FROM contacts WHERE jid = ?').run(to, from);
+  }
 }

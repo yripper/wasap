@@ -79,6 +79,9 @@ export class Sink {
       const loser = canonical === cl ? cp : cl;
       if (mergeFrom) chats.mergeInto(mergeFrom, canonical);
       aliases.repoint(loser, canonical);
+      this.d.messages.repointSender(loser, canonical);
+      // Names may sit under the loser or either raw form; senders now join on the winner.
+      for (const from of [loser, lid, pn]) this.d.contacts.copyIfMissing(from, canonical);
       aliases.add(lid, canonical);
       aliases.add(pn, canonical);
       return;
@@ -86,6 +89,7 @@ export class Sink {
     // Already one identity; make sure both raw forms point at it directly.
     aliases.add(lid, cl);
     aliases.add(pn, cl);
+    for (const from of [lid, pn]) this.d.contacts.copyIfMissing(from, cl);
   }
 
   private applyContacts(contacts: { jid: string; name: string }[]): void {

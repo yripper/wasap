@@ -176,4 +176,23 @@ describe('Sink', () => {
     expect(chats.get(PN)).toBeNull();
     expect(boom.lastEventAt()).toBeNull();
   });
+
+  it('carries a contact name that arrived before the alias to the canonical sender', () => {
+    gw.emit({ kind: 'contacts', contacts: [{ jid: LID, name: 'Someone' }] });
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    gw.emit({ kind: 'messages', messages: [wm(GROUP, 'A', 1, { senderJid: LID })] });
+    expect(messages.history(GROUP, { limit: 10 })[0]).toMatchObject({ senderJid: PN, senderName: 'Someone' });
+  });
+
+  it('does not overwrite an existing winner name when merging contacts', () => {
+    gw.emit({ kind: 'contacts', contacts: [{ jid: LID, name: 'Lid Name' }, { jid: PN, name: 'Saved Name' }] });
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    expect(new ContactsRepo(db).name(PN)).toBe('Saved Name');
+  });
+
+  it('rewrites stored sender ids to the winner on merge', () => {
+    gw.emit({ kind: 'messages', messages: [wm(GROUP, 'A', 1, { senderJid: LID }), wm(GROUP, 'B', 2, { senderJid: PN })] });
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    expect(messages.history(GROUP, { limit: 10 }).map((m) => m.senderJid)).toEqual([PN, PN]);
+  });
 });
