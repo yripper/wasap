@@ -25,13 +25,13 @@ Everything that changes WhatsApp or the user's local organization: send, mark re
 - `markRead(d, chatId)` (`messaging.ts:52`) returns `true` when marked, `false` (no WhatsApp call) for a chat without stored messages; the `mark_read` tool turns that into `{ marked: false, reason: 'no messages stored' }`.
 - `archiveChats` / `unarchiveChats` (`organize.ts:24`, `:25`), `muteChat(d, chatId, untilSec | null)` (`organize.ts:28`), `unmuteChat` (`organize.ts:35`).
 - `leaveGroup(d, chatId)` (`destructive.ts:4`).
-- `cleanupPlan(d, { inactiveDays, excludeFull: true })` (`cleanup.ts:12`) returns a stored draft `CleanupPlan`; `cleanupApply(d, planId, chatIds)` (`cleanup.ts:41`) returns `{ left, failed }`.
+- `cleanupPlan(d, { inactiveDays, excludeFull: true })` (`cleanup.ts:14`) returns a stored draft `CleanupPlan`; `cleanupApply(d, planId, chatIds)` (`cleanup.ts:43`) returns `{ left, failed }`.
 
 ## Key methods
 
 - `sendMessage`: `requireChat`, quoted key from the store (`MessagesRepo.keyOf`, `NOT_FOUND` if absent), `chatGap` then `sends` limiter, captures `latestKey` before inserting the outgoing row, `gateway.sendText`, insert (`sentViaWasap: true`, `fromMe`, `senderJid: null`), then `markRead` on the captured key and `applyUnread(live, 0)`.
 - `audited` (`context.ts:31`): records action, chat id and `ok`/`error`. Nothing else goes into the audit row.
-- `cleanupApply` (`cleanup.ts:41`): validates plan (exists, unexpired, draft), splits ids into in-plan and not, flips the plan with `markApplied` (compare-and-set) before any call, then leaves each group via `leaveGroup`, sleeping `CLEANUP_CALL_GAP_MS` between calls.
+- `cleanupApply` (`cleanup.ts:43`): validates plan (exists, unexpired, draft), splits ids into in-plan and not, flips the plan with `markApplied` (compare-and-set) before any call, then leaves each group via `leaveGroup`, sleeping `CLEANUP_CALL_GAP_MS` between calls.
 
 ## Dependencies
 

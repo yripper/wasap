@@ -28,19 +28,19 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 
 - `openDb(file)` (`db.ts:6`), `migrate(db)` (`db.ts:14`).
 - `new ChatsRepo(db, defaultWatch: (kind) => WatchLevel)` (`chats-repo.ts:37`): `upsert`, `applyUnread`, `get`, `list` (`ChatFilter.excludeWatch` drops one watch level unless `watchLevel` is set), `setWatchLevel`, `setCategory`, `setSnooze`, `setArchived`, `setWaMuted`, `touchLastMessage`, `mergeInto`.
-- `new MessagesRepo(db)` (`messages-repo.ts:39`): `insertMany`, `repointSender`, `editText`, `softDelete`, `history`, `search`, `latestKey`, `outgoing` (`textOnly` option filters usable voice samples in SQL: not deleted, non-empty text, `sent_via_wasap = 0`), `countOutgoingSince`, `getText`.
-- `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:28`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:14`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
+- `new MessagesRepo(db)` (`messages-repo.ts:49`): `insertMany`, `repointSender`, `editText`, `softDelete`, `history`, `search`, `latestKey`, `outgoing` (`textOnly` option filters usable voice samples in SQL: not deleted, non-empty text, `sent_via_wasap = 0`), `countOutgoingSince`, `getText`.
+- `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:28`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:16`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
 - `new AliasesRepo(db)`, `new ContactsRepo(db)` (`upsertMany`, `name`, `copyIfMissing(from, to)`: insert-or-ignore name copy for alias merges), `new AuditRepo(db)`, `new CleanupPlansRepo(db)`.
 
 ## Key methods
 
-- `ChatsRepo.upsert` (`chats-repo.ts:42`): insert sets `watch_level` from `defaultWatch(kind)`; the conflict branch never touches `watch_level`, `category`, `snooze_until`. `title`/`archived`/`waMutedUntil` only change when supplied (`undefined` = keep; `waMutedUntil: null` clears).
-- `ChatsRepo.applyUnread` (`chats-repo.ts:70`): see unread invariant.
-- `ChatsRepo.mergeInto` (`chats-repo.ts:148`): see merge invariant.
-- `MessagesRepo.insertMany` (`messages-repo.ts:44`): `INSERT OR IGNORE`, one transaction, moves `chats.last_msg_*` forward with SQL (no ChatsRepo dependency).
-- `MessagesRepo.softDelete` (`messages-repo.ts:72`): sets `deleted_at`, nulls `text` (FTS trigger drops it from the index).
-- `MessagesRepo.history` (`messages-repo.ts:86`): newest first by `(ts, seq)`, keyset `beforeSeq` cursor.
-- `MessagesRepo.search` (`messages-repo.ts:106`): tokens are quoted (`toFtsQuery`, `messages-repo.ts:32`) so FTS syntax in the query is literal.
+- `ChatsRepo.upsert` (`chats-repo.ts:45`): insert sets `watch_level` from `defaultWatch(kind)`; the conflict branch never touches `watch_level`, `category`, `snooze_until`. `title`/`archived`/`waMutedUntil` only change when supplied (`undefined` = keep; `waMutedUntil: null` clears).
+- `ChatsRepo.applyUnread` (`chats-repo.ts:78`): see unread invariant.
+- `ChatsRepo.mergeInto` (`chats-repo.ts:167`): see merge invariant.
+- `MessagesRepo.insertMany` (`messages-repo.ts:54`): `INSERT OR IGNORE`, one transaction, moves `chats.last_msg_*` forward with SQL (no ChatsRepo dependency).
+- `MessagesRepo.softDelete` (`messages-repo.ts:89`): sets `deleted_at`, nulls `text` (FTS trigger drops it from the index).
+- `MessagesRepo.history` (`messages-repo.ts:96`): newest first by `(ts, seq)`, keyset `beforeSeq` cursor.
+- `MessagesRepo.search` (`messages-repo.ts:116`): tokens are quoted (`toFtsQuery`, `messages-repo.ts:33`) so FTS syntax in the query is literal.
 - `AliasesRepo.repoint` (`aliases-repo.ts:18`): moves aliases of the old canonical and also records old canonical → new.
 
 ## Dependencies

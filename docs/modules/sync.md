@@ -17,15 +17,15 @@ Applies gateway `WaEvent`s to the store: chats, messages, contacts and LID/phone
 
 ## Public surface
 
-- `chooseCanonical(lid, pn, existing)` (`canonical.ts:7`): both chats exist, older `createdAt` wins (tie: `pn`); one exists, it wins; none, `pn`.
+- `chooseCanonical(lid, pn, existing)` (`canonical.ts:6`): both chats exist, older `createdAt` wins (tie: `pn`); one exists, it wins; none, `pn`.
 - `new Sink({ db, chats, messages, aliases, contacts, now })` (`sink.ts:24`): `apply(e)` (`sink.ts:38`), `lastEventAt()` (`sink.ts:30`), `connection()` (`sink.ts:34`).
 
 ## Key methods
 
 - `Sink.apply` (`sink.ts:38`): `connection` events only update `connection()` (initial `'connecting'`) and don't touch `lastEventAt()`. Every other event runs in one `db.transaction`; a throw rolls back, propagates (the gateway guard logs it) and leaves `lastEventAt()` unchanged. `lastEventAt()` is `now()` after the last applied non-connection event.
 - `Sink.linkAlias` (`sink.ts:72`): resolves both forms first, picks the winner with `chooseCanonical` on the resolved canonicals, `chats.mergeInto(loser, winner)` when both chats exist, `aliases.repoint(loser, winner)`, `messages.repointSender(loser, winner)` rewrites stored `sender_jid`, `contacts.copyIfMissing` carries names from the loser and both raw forms to the winner (never overwriting), then adds both raw forms pointing straight at the winner.
-- `Sink.applyChat` (`sink.ts:101`): id resolved; upsert (null title/archived become `undefined` = keep; `ChatsRepo.upsert` also COALESCEs the title); `setWaMuted` only when `mutedUntil !== undefined`; `applyUnread` only when `unread` is non-null.
-- `Sink.applyMessages` (`sink.ts:109`): senders paired via `senderAltJid` first (`linkSender`, `sink.ts:128`), then chat and sender ids resolved, placeholder chat upserted (`chatKind`), `insertMany` with `sentViaWasap: false`.
+- `Sink.applyChat` (`sink.ts:105`): id resolved; upsert (null title/archived become `undefined` = keep; `ChatsRepo.upsert` also COALESCEs the title); `setWaMuted` only when `mutedUntil !== undefined`; `applyUnread` only when `unread` is non-null.
+- `Sink.applyMessages` (`sink.ts:114`): senders paired via `senderAltJid` first (`linkSender`, `sink.ts:136`), then chat and sender ids resolved, placeholder chat upserted (`chatKind`), `insertMany` with `sentViaWasap: false`.
 - `wa_jid`: `applyChat` passes the raw `WaChat.id` as `waJid` (chat-level events are authoritative); `applyMessages` passes the raw chat id only as `firstSeenAs` (seeds a new row, never overwrites) and stores the raw sender as `senderWaJid` next to the canonical `senderJid`.
 - `edit`/`revoke` resolve the chat id, then `editText`/`softDelete`.
 - `contacts`: stored under the raw jid and, when it differs, the canonical one (senders are stored canonical).

@@ -48,7 +48,7 @@ All `chat_id` params are JID strings. `category` is lowercase, <= 32 chars, `/^[
 ### Output format (`format.ts`)
 
 - `MessageView { seq, ts (ISO), from: 'me' | { jid, name }, text, media, quoted_id, edited, deleted }` (`format.ts:6`). Media-only messages render `text` as `[<kind>]`, and `mediaKind 'other'` (types wasap can't render) as `[unsupported]`; deleted ones as `[deleted]`. In a DM with no stored sender, `from.jid` is the chat id.
-- `ChatView.muted` is `'forever'` (stored `-1`), an ISO string for a future mute, or `null` (also for expired mutes); never a 1969 date (`format.ts:54`).
+- `ChatView.muted` is `'forever'` (stored `-1`), an ISO string for a future mute, or `null` (also for expired mutes); never a 1969 date (`format.ts:60`).
 - `PendingView` = `ChatView` + `reason` + `latest_incoming`.
 
 ## Dependencies
