@@ -20,7 +20,11 @@ export function registerMessagingTools(server: McpServer, d: ToolDeps): void {
 
   server.registerTool(
     'mark_read',
-    { description: 'Mark a chat as read in WhatsApp.', inputSchema: { chat_id: chatId }, annotations: WHATSAPP_WRITE },
-    (a) => run(() => markRead(d.actions, a.chat_id)),
+    { description: 'Mark a chat as read in WhatsApp. Returns {marked: false, reason} when there is no stored message to anchor on.', inputSchema: { chat_id: chatId }, annotations: WHATSAPP_WRITE },
+    (a) =>
+      run(async () =>
+        // Silent success would let Claude report a chat as read when nothing happened.
+        (await markRead(d.actions, a.chat_id)) ? { marked: true } : { marked: false, reason: 'no messages stored' },
+      ),
   );
 }

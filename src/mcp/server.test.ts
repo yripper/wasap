@@ -120,6 +120,13 @@ describe('MCP tools', () => {
     expect((await json<{ items: unknown[] }>('get_pending')).items).toEqual([]);
   });
 
+  it('mark_read says so when the chat has no stored messages', async () => {
+    made.t.chats.upsert({ id: '555@s.whatsapp.net', kind: 'dm' }, 1000);
+    expect(await json('mark_read', { chat_id: '555@s.whatsapp.net' })).toEqual({ marked: false, reason: 'no messages stored' });
+    expect(await json('mark_read', { chat_id: DM })).toEqual({ marked: true });
+    expect(made.t.gateway.callsTo('markRead')).toHaveLength(1);
+  });
+
   it('rejects invalid input without sending', async () => {
     const res = await call('send_message', { chat_id: GROUP, text: '' });
     expect(res.isError).toBe(true);

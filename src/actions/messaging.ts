@@ -47,11 +47,13 @@ async function tryMarkRead(d: ActionDeps, chatId: string, waJid: string, last: M
   }
 }
 
-/// No-op when the chat has no stored messages: there is nothing to mark.
-export async function markRead(d: ActionDeps, chatId: string): Promise<void> {
+/// False (and no WhatsApp call) when the chat has no stored messages: WhatsApp
+/// needs a message to anchor the read on.
+export async function markRead(d: ActionDeps, chatId: string): Promise<boolean> {
   const chat = requireChat(d, chatId);
   const last = d.messages.latestKey(chatId);
-  if (!last) return;
+  if (!last) return false;
   await audited(d, 'mark_read', chatId, () => d.gateway.markRead(chat.waJid, last));
   d.chats.applyUnread(chatId, { kind: 'live', value: 0 });
+  return true;
 }

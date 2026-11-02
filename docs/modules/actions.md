@@ -22,7 +22,7 @@ Everything that changes WhatsApp or the user's local organization: send, mark re
 ## Public surface
 
 - `sendMessage(d, chatId, text, replyToWaId?)` (`messaging.ts:13`) returns `{ waId, markedRead }`.
-- `markRead(d, chatId)` (`messaging.ts:51`): no-op for a chat without stored messages.
+- `markRead(d, chatId)` (`messaging.ts:52`) returns `true` when marked, `false` (no WhatsApp call) for a chat without stored messages; the `mark_read` tool turns that into `{ marked: false, reason: 'no messages stored' }`.
 - `archiveChats` / `unarchiveChats` (`organize.ts:24`, `:25`), `muteChat(d, chatId, untilSec | null)` (`organize.ts:28`), `unmuteChat` (`organize.ts:35`).
 - `leaveGroup(d, chatId)` (`destructive.ts:4`).
 - `cleanupPlan(d, { inactiveDays, excludeFull: true })` (`cleanup.ts:12`) returns a stored draft `CleanupPlan`; `cleanupApply(d, planId, chatIds)` (`cleanup.ts:41`) returns `{ left, failed }`.

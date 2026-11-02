@@ -91,13 +91,13 @@ describe('sendMessage', () => {
 
 describe('markRead', () => {
   it('marks the latest message and clears unread', async () => {
-    await markRead(t.deps, DM);
+    expect(await markRead(t.deps, DM)).toBe(true);
     expect(t.gateway.callsTo('markRead')).toHaveLength(1);
     expect(t.chats.get(DM)?.unreadCount).toBe(0);
   });
 
   it('is a no-op for a chat without messages', async () => {
-    await markRead(t.deps, DM2);
+    expect(await markRead(t.deps, DM2)).toBe(false);
     expect(t.gateway.callsTo('markRead')).toHaveLength(0);
   });
 
