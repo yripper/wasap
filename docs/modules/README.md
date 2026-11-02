@@ -5,7 +5,7 @@ Living docs, one per module. **Read the relevant doc before modifying a module; 
 | Doc | Module | One-liner |
 |---|---|---|
 | [domain.md](domain.md) | `src/domain/` | Pure logic with no I/O: `AppError` and rate limiting. |
-| [mcp.md](mcp.md) | `src/mcp/` | The MCP server Claude talks to: Streamable HTTP on `127.0.0.1`, bearer-token auth and result helpers. |
+| [mcp.md](mcp.md) | `src/mcp/` | The MCP server Claude talks to: HTTP transport with bearer auth, usage instructions, formatting and the 24 tools. |
 | [secrets.md](secrets.md) | `src/secrets/` | macOS Keychain access through the built-in `security` CLI. |
 | [config.md](config.md) | `src/config/` | `~/.wasap` path layout and zod-validated config. |
 | [daemon.md](daemon.md) | `src/daemon/` | Single-instance lock, logger, background loop, bearer token and connection snippets. |
