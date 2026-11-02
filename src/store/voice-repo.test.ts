@@ -51,4 +51,17 @@ describe('VoiceRepo', () => {
     expect(voice.countOutgoingInCategory('work', 200)).toBe(50);
     expect(voice.countOutgoingInCategory('general', 0)).toBe(1);
   });
+
+  it('counts soft-deleted outgoing messages and is inclusive at ts === updatedAt', () => {
+    const chats = new ChatsRepo(db, () => 'normal');
+    const messages = new MessagesRepo(db);
+    chats.upsert({ id: '111@s.whatsapp.net', kind: 'dm' }, 1);
+    chats.setCategory('111@s.whatsapp.net', 'work');
+    const base = { chatId: '111@s.whatsapp.net', fromMe: true, senderJid: null, text: 'x', mediaKind: null, quotedId: null, sentViaWasap: false };
+    messages.insertMany([{ ...base, waId: 'a', ts: 100 }, { ...base, waId: 'b', ts: 101 }]);
+    messages.softDelete('111@s.whatsapp.net', 'a', 150);
+    expect(voice.countOutgoingInCategory('work', 100)).toBe(2);
+    expect(voice.countOutgoingInCategory('work', 101)).toBe(1);
+    expect(voice.countOutgoingInCategory('work', 102)).toBe(0);
+  });
 });

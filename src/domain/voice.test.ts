@@ -3,7 +3,6 @@ import { ChatsRepo } from '../store/chats-repo.js';
 import { openDb } from '../store/db.js';
 import { MessagesRepo } from '../store/messages-repo.js';
 import { VoiceRepo } from '../store/voice-repo.js';
-import { AppError } from './errors.js';
 import { STALE, isStale, staleProfiles, voiceContext } from './voice.js';
 
 const DAY = 86400;
@@ -48,12 +47,7 @@ describe('voiceContext', () => {
   });
 
   it('throws NOT_FOUND for an unknown chat', () => {
-    expect(() => voiceContext(deps, 'nope@g.us', 1)).toThrow(AppError);
-    try {
-      voiceContext(deps, 'nope@g.us', 1);
-    } catch (e) {
-      expect((e as AppError).code).toBe('NOT_FOUND');
-    }
+    expect(() => voiceContext(deps, 'nope@g.us', 1)).toThrowError(expect.objectContaining({ code: 'NOT_FOUND' }));
   });
 
   it('marks the profile stale after 30 sent messages across two chats in the category', () => {

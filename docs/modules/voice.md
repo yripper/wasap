@@ -38,6 +38,8 @@ Storage and staleness logic for writing in the user's voice: one tone profile pe
 - Unknown chat id -> `AppError('NOT_FOUND')`.
 - `notesStale` is false with no notes; `profileStale` is false with no profile (`needsLearning` covers that case).
 - Category membership is the chat's *current* category, so recategorizing a chat moves its past messages into the new category's count.
+- Soft-deleted (revoked) outgoing messages still count: the user wrote them and the goal is measuring activity (tested in `voice-repo.test.ts`).
+- The window is inclusive: a message with `ts === updated_at` counts (`m.ts >= ?`, `voice-repo.ts:56`).
 - The count includes messages sent via wasap and from the phone alike (`from_me = 1`).
 
 ## Testing
