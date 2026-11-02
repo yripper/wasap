@@ -4,14 +4,22 @@ import type { ChatKind } from './types.js';
 export type CleanupMode = 'remove' | 'archive';
 export type CleanupAction = 'delete' | 'leave' | 'archive';
 
-/// Stored as JSON; the cleanup domain module (later task) owns its shape.
-export type CleanupCriteria = Record<string, unknown>;
+/// Stored as JSON. `excludeFull: true` is a literal so a plan can never be
+/// built that touches groups on full watch.
+export interface CleanupCriteria {
+  inactiveDays: number;
+  excludeFull: true;
+}
 
 export interface CleanupItem {
   chatId: string;
   title: string;
   kind: ChatKind;
   action: CleanupAction;
+  /// Member-free stats the user reviews before approving; seconds, null = none.
+  lastMsgTs: number | null;
+  myLastMsgTs: number | null;
+  unreadCount: number;
 }
 
 export interface CleanupPlan {

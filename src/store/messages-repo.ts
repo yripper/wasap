@@ -107,6 +107,19 @@ export class MessagesRepo {
     return r ? { waId: r.wa_id, fromMe: r.from_me === 1, ts: r.ts, senderJid: r.sender_jid } : null;
   }
 
+  /// Reference to one stored message, for quoting it in a reply.
+  keyOf(chatId: string, waId: string): MessageKeyRef | null {
+    const r = this.db
+      .prepare('SELECT wa_id, from_me, ts, sender_jid FROM messages WHERE chat_id = ? AND wa_id = ?')
+      .get(chatId, waId) as { wa_id: string; from_me: number; ts: number; sender_jid: string | null } | undefined;
+    return r ? { waId: r.wa_id, fromMe: r.from_me === 1, ts: r.ts, senderJid: r.sender_jid } : null;
+  }
+
+  lastOutgoingTs(chatId: string): number | null {
+    const r = this.db.prepare('SELECT max(ts) AS ts FROM messages WHERE chat_id = ? AND from_me = 1').get(chatId) as { ts: number | null };
+    return r.ts;
+  }
+
   outgoing(chatIds: string[], o: { limit: number }): MessageRow[] {
     if (chatIds.length === 0) return [];
     const marks = chatIds.map(() => '?').join(',');

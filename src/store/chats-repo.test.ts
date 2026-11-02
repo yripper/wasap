@@ -194,8 +194,8 @@ describe('CleanupPlansRepo', () => {
       createdAt: 1,
       expiresAt: 2,
       mode: 'archive',
-      criteria: { inactiveDays: 30 },
-      items: [{ chatId: GROUP, title: 'G', kind: 'group', action: 'archive' }],
+      criteria: { inactiveDays: 30, excludeFull: true },
+      items: [{ chatId: GROUP, title: 'G', kind: 'group', action: 'archive', lastMsgTs: null, myLastMsgTs: null, unreadCount: 0 }],
       status: 'draft',
     });
     expect(repo.get('p1')?.items[0]?.chatId).toBe(GROUP);

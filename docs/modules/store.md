@@ -56,7 +56,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 - `latestKey` orders by `ts`, `history` by `seq` (backfilled rows get later seqs).
 - `messages.text` is nullable (media, deleted). Never log it.
 - Migrations are append-only; never edit shipped migrations (0, 1).
-- `CleanupCriteria` is a loose `Record<string, unknown>`: the cleanup domain module (later task) should tighten it.
+- `CleanupCriteria` is `{ inactiveDays: number; excludeFull: true }`; `CleanupItem` carries `lastMsgTs`, `myLastMsgTs`, `unreadCount` for the review list. Plans stored by older code would lack those fields (none shipped).
 
 ## Testing
 

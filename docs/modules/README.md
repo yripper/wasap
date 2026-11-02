@@ -13,3 +13,4 @@ Living docs, one per module. **Read the relevant doc before modifying a module; 
 | [whatsapp.md](whatsapp.md) | `src/whatsapp/` | Baileys boundary: event adapters, encrypted auth state, live gateway with bounded reconnect, QR login. |
 | [sync.md](sync.md) | `src/sync/` | Applies gateway events to the store with LID/phone alias canonicalization. |
 | [voice.md](voice.md) | `src/store/voice-repo.ts`, `src/domain/voice.ts` | Tone profiles per category, per-chat notes, and staleness rules. |
+| [actions.md](actions.md) | `src/actions/` | Send, mark read, archive, mute, leave groups and two-step group cleanup, rate limited and audited. |

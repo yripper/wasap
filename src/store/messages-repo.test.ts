@@ -93,4 +93,13 @@ describe('MessagesRepo', () => {
     expect(repo.countOutgoingSince([DM, GROUP], 20)).toBe(2);
     expect(repo.countOutgoingSince([], 0)).toBe(0);
   });
+
+  it('keyOf finds a stored message and lastOutgoingTs only counts fromMe', () => {
+    repo.insertMany([msg(DM, 'a', 10, { fromMe: true }), msg(DM, 'b', 20, { senderJid: DM })]);
+    expect(repo.keyOf(DM, 'b')).toEqual({ waId: 'b', fromMe: false, ts: 20, senderJid: DM });
+    expect(repo.keyOf(DM, 'nope')).toBeNull();
+    expect(repo.keyOf(GROUP, 'b')).toBeNull();
+    expect(repo.lastOutgoingTs(DM)).toBe(10);
+    expect(repo.lastOutgoingTs(GROUP)).toBeNull();
+  });
 });
