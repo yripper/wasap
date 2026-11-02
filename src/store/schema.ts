@@ -80,4 +80,18 @@ export const MIGRATIONS: readonly string[] = [
     outcome TEXT NOT NULL
   );
   `,
+  // Personal data: tone profiles and per-chat notes live only here.
+  `
+  CREATE TABLE tone_profiles (
+    category TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE chat_notes (
+    chat_id TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
 ];

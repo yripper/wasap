@@ -12,3 +12,4 @@ Living docs, one per module. **Read the relevant doc before modifying a module; 
 | [store.md](store.md) | `src/store/` | SQLite schema and repos: chats, messages (FTS), JID aliases, contacts, audit, cleanup plans. |
 | [whatsapp.md](whatsapp.md) | `src/whatsapp/` | Baileys boundary: event adapters, encrypted auth state, live gateway with bounded reconnect, QR login. |
 | [sync.md](sync.md) | `src/sync/` | Applies gateway events to the store with LID/phone alias canonicalization. |
+| [voice.md](voice.md) | `src/store/voice-repo.ts`, `src/domain/voice.ts` | Tone profiles per category, per-chat notes, and staleness rules. |

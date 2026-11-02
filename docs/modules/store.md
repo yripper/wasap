@@ -22,6 +22,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 | `src/store/contacts-repo.ts` | `ContactsRepo` (jid → saved name) |
 | `src/store/audit-repo.ts` | `AuditRepo` (metadata only) |
 | `src/store/cleanup-plans-repo.ts` | `CleanupPlansRepo` (draft → applied) |
+| `src/store/voice-repo.ts` | `VoiceRepo` (see [voice.md](voice.md)); migration 1 adds its tables |
 
 ## Public surface
 
@@ -54,7 +55,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 - `last_msg_ts` is forward-only (`ts >= current`), so backfill can't regress it.
 - `latestKey` orders by `ts`, `history` by `seq` (backfilled rows get later seqs).
 - `messages.text` is nullable (media, deleted). Never log it.
-- Migrations are append-only; never edit migration 0.
+- Migrations are append-only; never edit shipped migrations (0, 1).
 - `CleanupCriteria` is a loose `Record<string, unknown>`: the cleanup domain module (later task) should tighten it.
 
 ## Testing
