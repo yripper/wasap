@@ -20,17 +20,19 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 | `src/whatsapp/connection.ts` | `ReconnectController`: bounded reconnect policy, Baileys-free |
 | `src/whatsapp/events.ts` | Pure Baileys event payload to `WaEvent[]` mapping, `closeReason` |
 | `src/whatsapp/gateway.ts` | `createSocket` (shared socket options) and `BaileysGateway` |
-| `src/whatsapp/login.ts` | `runLogin`: QR pairing in the terminal |
-| `src/testing/fake-gateway.ts` | `FakeGateway`: records calls, `emit(e)` pushes events |
+| `src/whatsapp/login.ts` | `runLogin` (QR pairing in the terminal), `isLinked`, `clearLink`, `runLogout` |
+| `src/testing/fake-gateway.ts` | `FakeGateway`: records calls (including `stop`), `emit(e)` pushes events |
 | `src/testing/fixtures.ts` | `waMessage()` builder with fake JIDs |
 
 ## Public surface
 
-- `WhatsAppGateway` (`types.ts:29`): `onEvent`, `sendText`, `markRead`, `setArchived`, `setMuted`, `leaveGroup`, `groupTitle`, `state`.
+- `WhatsAppGateway` (`types.ts:29`): `onEvent`, `sendText`, `markRead`, `setArchived`, `setMuted`, `leaveGroup`, `groupTitle`, `state`, `stop` (`types.ts:39`, daemon shutdown).
 - `WaMessage` (`types.ts:16`) is `NewMessage` minus `sentViaWasap` plus `senderAltJid`; `chatId` is as Baileys gave it (may be `@lid`).
 - `MessageKeyRef` is re-exported from `src/store/types.ts`.
 - `BaileysGateway.start({ authDir, crypto, getMessageText, logger })` (`gateway.ts:84`) and `stop()` (`gateway.ts:92`).
 - `runLogin({ authDir, crypto, print })` (`login.ts:22`) resolves `{ meJid }` (normalized, no device suffix).
+- `isLinked(authDir, crypto)` (`login.ts:95`): creds carry `me`. `clearLink(authDir, crypto)` (`login.ts:101`): deletes the session files.
+- `runLogout({ authDir, crypto, timeoutMs? })` (`login.ts:118`) resolves `LogoutResult` (`login.ts:114`): `'not_linked'` (nothing touched), `'remote'` (socket opened and `sock.logout()` sent `remove-companion-device`), `'local_only'` (could not open within `timeoutMs`, default 30 s, or the call failed). The auth dir is cleared in both linked cases.
 - `ReconnectController` (`connection.ts:14`): `handleClose('logged_out' | 'terminal' | 'other')`, `handleOpen()`, `stop()`.
 
 ## Key methods
@@ -84,6 +86,7 @@ Baileys (`makeWASocket`, `makeCacheableSignalKeyStore`, `Browsers`, `DisconnectR
 - Edit/revoke `ts` is the outer message's timestamp, not the target's.
 - A wrong auth key makes `useEncryptedAuthState` throw (GCM auth failure); never fall back to fresh creds on that error or the paired session is lost.
 - Never log message text or names.
+- `runLogout` does not save creds updates from its short-lived socket; the files are wiped right after. It clears locally even when the remote logout fails, so the phone may still list the device (the CLI tells the user to remove it there).
 - **Gateway state**: methods throw `AppError('LOGGED_OUT')` when logged out and `AppError('INTERNAL', 'not connected (state: …)')` for any other non-`open` state (`gateway.ts:147`). `groupTitle` throws too when not open (only Baileys errors become `null`).
 - `start` throws `AUTH_REQUIRED` when the creds have no `me` (never paired). It resolves once the socket is created, not when it opens; register `onEvent` right after `start` resolves (events are network-driven, so none fire before then).
 - `logged_out` and `gave_up` are terminal for the process: nothing reconnects until the daemon restarts (after `wasap login` for the former). `gave_up` comes either from backoff exhaustion or from a terminal close code (the warn log names which). A 515 on the daemon's socket is handled by the normal backoff (first retry ~2s).
@@ -95,4 +98,4 @@ Baileys (`makeWASocket`, `makeCacheableSignalKeyStore`, `Browsers`, `DisconnectR
 
 ## Testing
 
-`adapt.test.ts`, `auth-state.test.ts`, `session-crypto.test.ts`, `backoff.test.ts`, `connection.test.ts` (reconnect policy with fake `connect`/`sleep`/`delay`), `events.test.ts` (event mapping, `classifyClose`/`closeReason`, `guardEvents` with fake payloads and fake JIDs); `adapt.test.ts` also covers the mute ms/seconds conversion. Run `pnpm vitest run src/whatsapp`. `BaileysGateway` and `runLogin` are not unit-tested (they need a live socket); they are verified manually against a real account.
+`adapt.test.ts`, `auth-state.test.ts`, `session-crypto.test.ts`, `backoff.test.ts`, `connection.test.ts` (reconnect policy with fake `connect`/`sleep`/`delay`), `events.test.ts` (event mapping, `classifyClose`/`closeReason`, `guardEvents` with fake payloads and fake JIDs), `login.test.ts` (`isLinked`, `clearLink`, `runLogout` when not linked; temp dirs, no network); `adapt.test.ts` also covers the mute ms/seconds conversion. Run `pnpm vitest run src/whatsapp`. `BaileysGateway`, `runLogin` and the network path of `runLogout` are not unit-tested (they need a live socket); they are verified manually against a real account.

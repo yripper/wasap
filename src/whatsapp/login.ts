@@ -90,3 +90,59 @@ async function closeResult(err: unknown, auth: Auth): Promise<Attempt> {
   }
   return { kind: 'failed', error: new AppError('AUTH_REQUIRED', 'WhatsApp login did not complete (QR expired or connection lost); try again') };
 }
+
+/// True when the auth dir holds a paired device (creds carry `me`).
+export async function isLinked(authDir: string, crypto: SessionCrypto): Promise<boolean> {
+  const auth = await useEncryptedAuthState(authDir, crypto);
+  return !!auth.state.creds.me;
+}
+
+/// Deletes the local session files; the phone still lists the device until it is removed there.
+export async function clearLink(authDir: string, crypto: SessionCrypto): Promise<void> {
+  await (await useEncryptedAuthState(authDir, crypto)).clear();
+}
+
+export interface LogoutOptions {
+  authDir: string;
+  crypto: SessionCrypto;
+  /// How long to wait for the socket to open before giving up on the remote logout.
+  timeoutMs?: number;
+}
+
+/// `remote`: WhatsApp removed the linked device. `local_only`: we could not reach
+/// WhatsApp (or it had already revoked us), so only the local session was cleared.
+export type LogoutResult = 'not_linked' | 'remote' | 'local_only';
+
+/// Unlinks this device from the account, then clears the local session either way:
+/// the user asked to log out, and a half-cleared session is worse than none.
+export async function runLogout(o: LogoutOptions): Promise<LogoutResult> {
+  const auth = await useEncryptedAuthState(o.authDir, o.crypto);
+  if (!auth.state.creds.me) return 'not_linked';
+  // Creds updates during this short connection are not saved: the files are wiped right after.
+  const sock = createSocket({ auth: auth.state, logger: pino({ level: 'silent' }), getMessageText: () => null });
+  let remote = false;
+  try {
+    await waitForOpen(sock, o.timeoutMs ?? 30_000);
+    await sock.logout();
+    remote = true;
+  } catch {
+    await sock.end(undefined);
+  }
+  await auth.clear();
+  return remote ? 'remote' : 'local_only';
+}
+
+function waitForOpen(sock: WASocket, timeoutMs: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new AppError('INTERNAL', 'timed out connecting to WhatsApp')), timeoutMs);
+    sock.ev.on('connection.update', (u: BaileysEventMap['connection.update']) => {
+      if (u.connection === 'open') {
+        clearTimeout(timer);
+        resolve();
+      } else if (u.connection === 'close') {
+        clearTimeout(timer);
+        reject(new AppError('INTERNAL', `WhatsApp closed the connection (${closeReason(u.lastDisconnect?.error).name})`));
+      }
+    });
+  });
+}

@@ -35,4 +35,6 @@ export interface WhatsAppGateway {
   leaveGroup(chatId: string): Promise<void>;
   groupTitle(chatId: string): Promise<string | null>;
   state(): ConnectionState;
+  /// Closes the connection for good (daemon shutdown); no reconnect afterwards.
+  stop(): Promise<void>;
 }

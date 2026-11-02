@@ -6,7 +6,7 @@
 
 ## Purpose
 
-The MCP server Claude talks to: Streamable HTTP on `127.0.0.1` with bearer-token auth, the usage instructions sent on initialize, and 24 tools that are thin wrappers over `src/actions/`, the store and the voice domain. The daemon wiring (building `ToolDeps`, passing `buildServer` to `startHttpServer`) belongs to a later task.
+The MCP server Claude talks to: Streamable HTTP on `127.0.0.1` with bearer-token auth, the usage instructions sent on initialize, and 24 tools that are thin wrappers over `src/actions/`, the store and the voice domain. The daemon (`src/daemon/daemon.ts`) builds `ToolDeps` and passes a fresh `buildServer` per request to `startHttpServer`.
 
 ## Structure
 

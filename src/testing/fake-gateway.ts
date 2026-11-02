@@ -56,4 +56,8 @@ export class FakeGateway implements WhatsAppGateway {
   state(): ConnectionState {
     return this.connection;
   }
+
+  async stop(): Promise<void> {
+    this.record('stop', []);
+  }
 }
