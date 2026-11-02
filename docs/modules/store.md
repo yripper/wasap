@@ -28,7 +28,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 
 - `openDb(file)` (`db.ts:6`), `migrate(db)` (`db.ts:14`).
 - `new ChatsRepo(db, defaultWatch: (kind) => WatchLevel)` (`chats-repo.ts:34`): `upsert`, `applyUnread`, `get`, `list`, `setWatchLevel`, `setCategory`, `setSnooze`, `setArchived`, `setWaMuted`, `touchLastMessage`, `mergeInto`.
-- `new MessagesRepo(db)` (`messages-repo.ts:39`): `insertMany`, `repointSender`, `editText`, `softDelete`, `history`, `search`, `latestKey`, `outgoing`, `countOutgoingSince`, `getText`.
+- `new MessagesRepo(db)` (`messages-repo.ts:39`): `insertMany`, `repointSender`, `editText`, `softDelete`, `history`, `search`, `latestKey`, `outgoing` (`textOnly` option filters usable text in SQL), `countOutgoingSince`, `getText`.
 - `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:28`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:14`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
 - `new AliasesRepo(db)`, `new ContactsRepo(db)` (`upsertMany`, `name`, `copyIfMissing(from, to)`: insert-or-ignore name copy for alias merges), `new AuditRepo(db)`, `new CleanupPlansRepo(db)`.
 

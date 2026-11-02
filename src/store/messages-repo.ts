@@ -120,12 +120,14 @@ export class MessagesRepo {
     return r.ts;
   }
 
-  outgoing(chatIds: string[], o: { limit: number }): MessageRow[] {
+  /// `textOnly` filters in SQL (not deleted, has text) so the limit counts usable
+  /// samples: a chat full of audios or revoked messages must not shrink it.
+  outgoing(chatIds: string[], o: { limit: number; textOnly?: boolean }): MessageRow[] {
     if (chatIds.length === 0) return [];
     const marks = chatIds.map(() => '?').join(',');
     return (
       this.db
-        .prepare(`${SELECT_MESSAGE} WHERE m.from_me = 1 AND m.chat_id IN (${marks}) ORDER BY m.seq DESC LIMIT ?`)
+        .prepare(`${SELECT_MESSAGE} WHERE m.from_me = 1 AND m.chat_id IN (${marks})${o.textOnly ? " AND m.deleted_at IS NULL AND m.text IS NOT NULL AND m.text != ''" : ''} ORDER BY m.seq DESC LIMIT ?`)
         .all(...chatIds, o.limit) as Record<string, unknown>[]
     ).map(rowToMessage);
   }

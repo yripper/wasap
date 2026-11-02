@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { requireChat } from '../../actions/context.js';
 import { AppError } from '../../domain/errors.js';
 import { staleProfiles, voiceContext } from '../../domain/voice.js';
-import type { MessageRow } from '../../store/types.js';
 import { formatMessage } from '../format.js';
 import { run } from '../result.js';
 import type { ToolDeps } from '../server.js';
@@ -13,11 +12,6 @@ import { category } from './schemas.js';
 
 const CHAT_SAMPLE = 60;
 const CATEGORY_SAMPLE = 40;
-
-/// Only messages with words in them teach a style; deleted and media-only rows don't.
-function ownTexts(rows: MessageRow[]): MessageRow[] {
-  return rows.filter((m) => m.deletedAt === null && m.text);
-}
 
 function categoryChatIds(d: ToolDeps, name: string): string[] {
   return d.actions.chats.list({ category: name, limit: 100_000, offset: 0 }).map((c) => c.id);
@@ -37,11 +31,11 @@ export function registerVoiceTools(server: McpServer, d: ToolDeps): void {
         const ctx = voiceContext({ chats: d.actions.chats, messages: d.actions.messages, voice: d.voice }, a.chat_id, d.actions.now());
         const out: Record<string, unknown> = { ...ctx };
         if (ctx.needsLearning || ctx.notesStale) {
-          out.my_messages_in_chat = ownTexts(d.actions.messages.outgoing([a.chat_id], { limit: CHAT_SAMPLE })).map(formatMessage);
+          out.my_messages_in_chat = d.actions.messages.outgoing([a.chat_id], { limit: CHAT_SAMPLE, textOnly: true }).map(formatMessage);
         }
         if (ctx.needsLearning) {
-          const rows = d.actions.messages.outgoing(categoryChatIds(d, ctx.category), { limit: CATEGORY_SAMPLE });
-          out.my_messages_in_category = ownTexts(rows).map((m) => ({ chat_id: m.chatId, ...formatMessage(m) }));
+          const rows = d.actions.messages.outgoing(categoryChatIds(d, ctx.category), { limit: CATEGORY_SAMPLE, textOnly: true });
+          out.my_messages_in_category = rows.map((m) => ({ chat_id: m.chatId, ...formatMessage(m) }));
         }
         return out;
       }),
@@ -61,7 +55,7 @@ export function registerVoiceTools(server: McpServer, d: ToolDeps): void {
         }
         if (a.chat_id !== undefined) requireChat(d.actions, a.chat_id);
         const ids = a.chat_id !== undefined ? [a.chat_id] : categoryChatIds(d, a.category ?? '');
-        return ownTexts(d.actions.messages.outgoing(ids, { limit: a.limit })).map((m) => ({ chat_id: m.chatId, ...formatMessage(m) }));
+        return d.actions.messages.outgoing(ids, { limit: a.limit, textOnly: true }).map((m) => ({ chat_id: m.chatId, ...formatMessage(m) }));
       }),
   );
 

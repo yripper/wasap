@@ -80,6 +80,17 @@ describe('MessagesRepo', () => {
     expect(repo.latestKey(DM)).toEqual({ waId: 'new', fromMe: true, ts: 10, senderJid: DM });
   });
 
+  it('outgoing textOnly skips media-only and deleted rows before the limit', () => {
+    repo.insertMany([
+      msg(DM, 'a', 10, { fromMe: true }),
+      msg(DM, 'b', 20, { fromMe: true, text: null, mediaKind: 'audio' }),
+      msg(DM, 'c', 30, { fromMe: true }),
+    ]);
+    repo.softDelete(DM, 'c', 31);
+    expect(repo.outgoing([DM], { limit: 1, textOnly: true }).map((m) => m.waId)).toEqual(['a']);
+    expect(repo.outgoing([DM], { limit: 5 })).toHaveLength(3);
+  });
+
   it('outgoing and countOutgoingSince only see fromMe messages', () => {
     repo.insertMany([
       msg(DM, 'a', 10, { fromMe: true }),

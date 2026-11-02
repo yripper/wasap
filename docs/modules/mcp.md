@@ -41,7 +41,7 @@ The MCP server Claude talks to: Streamable HTTP on `127.0.0.1` with bearer-token
 | voice (`voice.ts`) | `get_voice`, `get_my_messages` (exactly one of `chat_id` / `category`, limit <= 200), `list_stale_profiles` (`READ`); `save_profile` (body <= 4000), `save_chat_notes` (body <= 2000) (`LOCAL_WRITE`) | |
 | messaging (`messaging.ts`) | `send_message` (also marks read), `mark_read` | `WHATSAPP_WRITE` |
 | organize (`organize.ts`) | `archive_chats`, `unarchive_chats`, `mute_chat` (`until?` ISO; absent = forever), `unmute_chat` | `WHATSAPP_WRITE` |
-| destructive (`destructive.ts`) | `leave_group`, `cleanup_apply` (`DESTRUCTIVE`); `cleanup_plan` (`READ`: only stores a draft) | |
+| destructive (`destructive.ts`) | `leave_group`, `cleanup_apply` (`DESTRUCTIVE`); `cleanup_plan` (`LOCAL_WRITE`: stores a draft plan row) | |
 
 All `chat_id` params are JID strings. `category` is lowercase, <= 32 chars, `/^[a-z0-9_-]+$/` (`schemas.ts:4`).
 
@@ -62,7 +62,7 @@ All `chat_id` params are JID strings. `category` is lowercase, <= 32 chars, `/^[
 - Handler errors are logged via `describeError`, never tokens or bodies.
 
 - **Read tools never touch the gateway and never mark anything read**; only `mark_read` and `send_message` do (tested in `server.test.ts`).
-- `get_voice` returns own messages only (`fromMe`, non-deleted, with text): `my_messages_in_chat` (<= 60) when `needsLearning` or `notesStale`, `my_messages_in_category` (<= 40, all chats in the category) when `needsLearning`.
+- `get_voice` returns own messages only, filtered in SQL (`MessagesRepo.outgoing(..., { textOnly: true })`: `from_me`, not deleted, non-empty text) so the limits count usable samples: `my_messages_in_chat` (<= 60) when `needsLearning` or `notesStale`, `my_messages_in_category` (<= 40, all chats in the category) when `needsLearning`.
 - `cleanup_apply` takes the ids to leave (`chat_ids`), not exclusions; ids outside the plan land in `failed`.
 - `BASE_INSTRUCTIONS` includes the base writing style (Chilean Spanish, no voseo, short, no sign-offs, no em dashes); the optional `style.md` is appended on top.
 - Zod input errors come back as SDK "Input validation error", not `VALIDATION:`; action-level validation uses `AppError('VALIDATION')`.

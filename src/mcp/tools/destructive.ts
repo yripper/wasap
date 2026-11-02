@@ -4,7 +4,7 @@ import { cleanupApply, cleanupPlan } from '../../actions/cleanup.js';
 import { leaveGroup } from '../../actions/destructive.js';
 import { run } from '../result.js';
 import type { ToolDeps } from '../server.js';
-import { DESTRUCTIVE, READ } from './annotations.js';
+import { DESTRUCTIVE, LOCAL_WRITE } from './annotations.js';
 import { chatId } from './read.js';
 
 const iso = (sec: number | null): string | null => (sec === null ? null : new Date(sec * 1000).toISOString());
@@ -16,14 +16,14 @@ export function registerDestructiveTools(server: McpServer, d: ToolDeps): void {
     (a) => run(() => leaveGroup(d.actions, a.chat_id)),
   );
 
-  // READ on purpose: planning only stores a draft, so allowlisting it is safe.
+  // Not READ: it stores a draft plan row (local only, nothing changes in WhatsApp).
   server.registerTool(
     'cleanup_plan',
     {
       description:
         'Step 1 of group cleanup: list groups where the user has not sent a message in inactive_days, without changing anything. Groups on full watch are never included. Show the numbered list to the user, then call cleanup_apply with the chat ids they approved. Plans expire after 30 minutes.',
       inputSchema: { inactive_days: z.number().int().min(1).max(3650) },
-      annotations: READ,
+      annotations: LOCAL_WRITE,
     },
     (a) =>
       run(() => {
