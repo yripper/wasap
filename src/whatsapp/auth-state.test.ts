@@ -26,6 +26,16 @@ describe('useEncryptedAuthState', () => {
     expect(JSON.stringify(b.state.creds, BufferJSON.replacer)).toBe(JSON.stringify(a.state.creds, BufferJSON.replacer));
   });
 
+  it('maps ids that differ only in unsafe characters to distinct files', async () => {
+    const a = await useEncryptedAuthState(dir, crypto1);
+    const ids = ['a+b', 'a/b', 'a_b', 'a=b', '111@s.whatsapp.net:1'];
+    await a.state.keys.set({ 'sender-key': Object.fromEntries(ids.map((id) => [id, Buffer.from(id)])) });
+    expect(await readdir(dir)).toHaveLength(ids.length);
+    const got = await a.state.keys.get('sender-key', ids);
+    for (const id of ids) expect(Buffer.from(got[id] as Uint8Array).toString()).toBe(id);
+    for (const f of await readdir(dir)) expect(f).toMatch(/^[A-Za-z0-9._-]+$/);
+  });
+
   it('throws when reloading with a different key', async () => {
     const a = await useEncryptedAuthState(dir, crypto1);
     await a.saveCreds();

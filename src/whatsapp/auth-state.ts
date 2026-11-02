@@ -16,8 +16,11 @@ import type { SessionCrypto } from './session-crypto.js';
 const CREDS_KEY = 'creds.json';
 
 /// Signal ids can contain JIDs (@, :) or base64 (+, =, /); none are filesystem-safe.
+/// base64url keeps the mapping injective (a lossy replace would let 'a+b' and
+/// 'a/b' share a file), and '.' never occurs in it or in a key type, so the
+/// type/id split is unambiguous too.
 function keyName(type: string, id: string): string {
-  return `${type}-${id}`.replace(/[^A-Za-z0-9._-]/g, '_');
+  return `${type}.${Buffer.from(id, 'utf8').toString('base64url')}`;
 }
 
 function isNotFound(err: unknown): boolean {
