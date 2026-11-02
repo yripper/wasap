@@ -1,0 +1,31 @@
+# dependencies & build
+node_modules/
+dist/
+coverage/
+
+# secrets & local state — real state lives in ~/.wasap, never in the repo
+.env
+.env.*
+!.env.example
+*.session
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+data/
+.wasap/
+*.lock
+!pnpm-lock.yaml
+
+# logs & OS
+*.log
+logs/
+.DS_Store
+
+# local tooling
+.claude/settings.local.json
+
+# agent planning docs: never commit
+docs/superpowers/
+.superpowers/
+auth/
