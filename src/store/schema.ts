@@ -98,4 +98,14 @@ export const MIGRATIONS: readonly string[] = [
   `
   CREATE INDEX messages_chat_ts_seq ON messages (chat_id, ts, seq);
   `,
+  // Baileys puts JIDs verbatim into app-state patches and message keys, with no
+  // lid/pn translation, so WhatsApp must be addressed by the form it used:
+  // wa_jid is the chat's raw JID from the latest chat-level event (wa_jid_rank
+  // orders those sightings for merges); sender_wa_jid is the raw sender JID.
+  `
+  ALTER TABLE chats ADD COLUMN wa_jid TEXT;
+  ALTER TABLE chats ADD COLUMN wa_jid_rank INTEGER NOT NULL DEFAULT 0;
+  UPDATE chats SET wa_jid = id;
+  ALTER TABLE messages ADD COLUMN sender_wa_jid TEXT;
+  `,
 ];

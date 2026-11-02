@@ -98,6 +98,30 @@ describe('Sink', () => {
     expect(chats.get(GROUP)?.kind).toBe('group');
   });
 
+  it('records the raw chat jid of the latest chat event as wa_jid', () => {
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    gw.emit({ kind: 'chats', chats: [wc(PN)] });
+    expect(chats.get(PN)?.waJid).toBe(PN);
+    gw.emit({ kind: 'chats', chats: [wc(LID)] });
+    expect(chats.get(PN)?.waJid).toBe(LID);
+    // A message under the other form is not a chat-level event: wa_jid stays.
+    gw.emit({ kind: 'messages', messages: [wm(PN, 'A', 1)] });
+    expect(chats.get(PN)?.waJid).toBe(LID);
+  });
+
+  it('a chat first seen through a message gets the raw jid as wa_jid', () => {
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    gw.emit({ kind: 'messages', messages: [wm(LID, 'A', 1)] });
+    expect(chats.get(PN)?.waJid).toBe(LID);
+  });
+
+  it('keeps the raw sender jid next to the canonical one', () => {
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    gw.emit({ kind: 'messages', messages: [wm(GROUP, 'A', 1, { senderJid: LID })] });
+    expect(messages.history(GROUP, { limit: 1 })[0]).toMatchObject({ senderJid: PN, senderWaJid: LID });
+    expect(messages.latestKey(GROUP)?.senderJid).toBe(LID);
+  });
+
   it('ignores a sender pair that is not one lid and one phone jid', () => {
     gw.emit({ kind: 'messages', messages: [wm(GROUP, 'A', 1, { senderJid: LID, senderAltJid: LID2 })] });
     expect(aliasRows()).toHaveLength(0);

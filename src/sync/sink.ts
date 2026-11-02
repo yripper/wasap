@@ -105,7 +105,8 @@ export class Sink {
   private applyChat(c: WaChat): void {
     const { chats, aliases, now } = this.d;
     const id = aliases.resolve(c.id);
-    chats.upsert({ id, kind: c.kind, title: c.title ?? undefined, archived: c.archived ?? undefined }, now());
+    // c.id is the raw JID WhatsApp used for this chat; actions must address it that way.
+    chats.upsert({ id, kind: c.kind, title: c.title ?? undefined, archived: c.archived ?? undefined, waJid: c.id }, now());
     if (c.mutedUntil !== undefined) chats.setWaMuted(id, c.mutedUntil);
     if (c.unread) chats.applyUnread(id, c.unread);
   }
@@ -118,13 +119,16 @@ export class Sink {
       waId: m.waId,
       fromMe: m.fromMe,
       senderJid: m.senderJid === null ? null : aliases.resolve(m.senderJid),
+      // Kept raw: WhatsApp needs the participant exactly as it sent it in message keys.
+      senderWaJid: m.senderJid,
       ts: m.ts,
       text: m.text,
       mediaKind: m.mediaKind,
       quotedId: m.quotedId,
       sentViaWasap: false,
     }));
-    for (const r of rows) chats.upsert({ id: r.chatId, kind: chatKind(r.chatId) }, now());
+    // Messages are not chat-level events: the raw chat JID only seeds wa_jid for a brand-new chat.
+    for (const m of batch) chats.upsert({ id: aliases.resolve(m.chatId), kind: chatKind(m.chatId), firstSeenAs: m.chatId }, now());
     messages.insertMany(rows);
   }
 

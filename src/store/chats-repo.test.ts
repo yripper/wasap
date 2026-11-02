@@ -31,6 +31,15 @@ describe('ChatsRepo', () => {
     expect(repo.get('nope@s.whatsapp.net')).toBeNull();
   });
 
+  it('wa_jid defaults to the id and only changes when supplied', () => {
+    repo.upsert({ id: DM, kind: 'dm' }, 1);
+    expect(repo.get(DM)?.waJid).toBe(DM);
+    repo.upsert({ id: DM, kind: 'dm', waJid: LID }, 1);
+    expect(repo.get(DM)?.waJid).toBe(LID);
+    repo.upsert({ id: DM, kind: 'dm' }, 1);
+    expect(repo.get(DM)?.waJid).toBe(LID);
+  });
+
   it('upsert twice keeps watchLevel, category and snoozeUntil', () => {
     repo.upsert({ id: DM, kind: 'dm', title: 'T' }, 10);
     repo.setWatchLevel(DM, 'full');
@@ -161,6 +170,18 @@ describe('ChatsRepo', () => {
       repo.setCategory(LID, 'waiting');
       repo.mergeInto(LID, DM);
       expect(repo.get(DM)).toMatchObject({ category: 'done', createdAt: 100 });
+    });
+
+    it('keeps the wa_jid seen most recently', () => {
+      repo.upsert({ id: DM, kind: 'dm', waJid: DM }, 100);
+      repo.upsert({ id: LID, kind: 'dm', waJid: LID }, 200);
+      repo.mergeInto(LID, DM);
+      expect(repo.get(DM)?.waJid).toBe(LID);
+      repo.upsert({ id: GROUP, kind: 'group', waJid: GROUP }, 1);
+      repo.upsert({ id: LID, kind: 'dm', waJid: LID }, 300);
+      repo.upsert({ id: DM, kind: 'dm', waJid: DM }, 300);
+      repo.mergeInto(LID, DM);
+      expect(repo.get(DM)?.waJid).toBe(DM);
     });
 
     it('renames the from row when into does not exist', () => {

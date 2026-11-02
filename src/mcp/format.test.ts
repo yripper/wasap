@@ -8,7 +8,7 @@ const msg = (over: Partial<MessageRow>): MessageRow => ({
 });
 
 const chat = (over: Partial<ChatRow>): ChatRow => ({
-  id: '999-1@g.us', kind: 'group', title: 'Test', unreadCount: 0, markedUnread: false, archived: false, waMutedUntil: null,
+  id: '999-1@g.us', kind: 'group', title: 'Test', waJid: '999-1@g.us', unreadCount: 0, markedUnread: false, archived: false, waMutedUntil: null,
   watchLevel: 'normal', category: 'general', snoozeUntil: null, lastMsgTs: null, lastMsgFromMe: null, createdAt: 0, ...over,
 });
 

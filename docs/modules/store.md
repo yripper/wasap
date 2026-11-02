@@ -56,7 +56,8 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 - `last_msg_ts` is forward-only (`ts >= current`), so backfill can't regress it.
 - **Newest means `(ts, seq)`, never `seq` alone.** History sync delivers the newest chunk first and later FULL chunks carry older messages with higher seqs, so `history`, `outgoing`, `search`, `latestKey` and the pending `lastIncoming` all order by `ts DESC, seq DESC` (index `messages_chat_ts_seq`, migration 2). `history`'s `beforeSeq` is a keyset cursor: it looks up that row's `ts` and returns rows strictly before `(ts, seq)`; a seq that isn't in the chat returns `[]`.
 - `messages.text` is nullable (media, deleted). Never log it.
-- Migrations are append-only; never edit shipped migrations (0, 1, 2).
+- **`wa_jid` / `sender_wa_jid` (migration 3).** `chats.wa_jid` is the raw JID from the latest chat-level event (`ChatUpsert.waJid` always overwrites it and bumps `wa_jid_rank` to max+1); `firstSeenAs` only seeds it when the row is created; otherwise it defaults to `id` (`rowToChat` also falls back to `id`). `mergeInto` takes `wa_jid` from the row with the higher `wa_jid_rank` (tie: `into`). `messages.sender_wa_jid` is the raw sender; `latestKey`/`keyOf` return it as `senderJid` (falling back to `sender_jid`) because those keys go back to WhatsApp. `repointSender` leaves it alone.
+- Migrations are append-only; never edit shipped migrations (0-3).
 - `CleanupCriteria` is `{ inactiveDays: number; excludeFull: true }`; `CleanupItem` carries `lastMsgTs`, `myLastMsgTs`, `unreadCount` for the review list. Plans stored by older code would lack those fields (none shipped).
 
 ## Testing

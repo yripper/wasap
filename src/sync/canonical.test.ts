@@ -7,7 +7,7 @@ const PN = '111@s.whatsapp.net';
 
 function row(id: string, createdAt: number): ChatRow {
   return {
-    id, kind: 'dm', title: null, unreadCount: 0, markedUnread: false, archived: false, waMutedUntil: null,
+    id, kind: 'dm', title: null, waJid: id, unreadCount: 0, markedUnread: false, archived: false, waMutedUntil: null,
     watchLevel: 'normal', category: 'general', snoozeUntil: null, lastMsgTs: null, lastMsgFromMe: null, createdAt,
   };
 }

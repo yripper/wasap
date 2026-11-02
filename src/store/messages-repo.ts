@@ -10,6 +10,7 @@ export function rowToMessage(r: Record<string, unknown>): MessageRow {
     waId: String(r.wa_id),
     fromMe: r.from_me === 1,
     senderJid: (r.sender_jid as string | null) ?? null,
+    senderWaJid: (r.sender_wa_jid as string | null) ?? null,
     senderName: (r.sender_name as string | null) ?? null,
     ts: Number(r.ts),
     text: (r.text as string | null) ?? null,
@@ -36,6 +37,15 @@ function toFtsQuery(query: string): string | null {
   return tokens.length ? tokens.map((t) => `"${t.replace(/"/g, '""')}"`).join(' ') : null;
 }
 
+const KEY_COLUMNS = 'wa_id, from_me, ts, sender_jid, sender_wa_jid';
+type KeyRow = { wa_id: string; from_me: number; ts: number; sender_jid: string | null; sender_wa_jid: string | null };
+
+/// Keys go back to WhatsApp, so the participant is the raw sender JID it sent
+/// (it does no lid/pn translation); rows stored before that column fall back.
+function toKeyRef(r: KeyRow): MessageKeyRef {
+  return { waId: r.wa_id, fromMe: r.from_me === 1, ts: r.ts, senderJid: r.sender_wa_jid ?? r.sender_jid };
+}
+
 export class MessagesRepo {
   constructor(private readonly db: Db) {}
 
@@ -43,8 +53,8 @@ export class MessagesRepo {
   /// events can overlap. Also moves chats.last_msg_* forward (never back).
   insertMany(rows: NewMessage[]): number {
     const insert = this.db.prepare(
-      `INSERT OR IGNORE INTO messages (chat_id, wa_id, from_me, sender_jid, ts, text, media_kind, quoted_id, sent_via_wasap)
-       VALUES (@chatId, @waId, @fromMe, @senderJid, @ts, @text, @mediaKind, @quotedId, @sent)`,
+      `INSERT OR IGNORE INTO messages (chat_id, wa_id, from_me, sender_jid, sender_wa_jid, ts, text, media_kind, quoted_id, sent_via_wasap)
+       VALUES (@chatId, @waId, @fromMe, @senderJid, @senderWaJid, @ts, @text, @mediaKind, @quotedId, @sent)`,
     );
     const touch = this.db.prepare(
       'UPDATE chats SET last_msg_ts = @ts, last_msg_from_me = @mine WHERE id = @id AND (last_msg_ts IS NULL OR @ts >= last_msg_ts)',
@@ -52,7 +62,7 @@ export class MessagesRepo {
     return this.db.transaction((batch: NewMessage[]): number => {
       let inserted = 0;
       for (const m of batch) {
-        const res = insert.run({ ...m, fromMe: bit(m.fromMe), sent: bit(m.sentViaWasap) });
+        const res = insert.run({ ...m, senderWaJid: m.senderWaJid ?? null, fromMe: bit(m.fromMe), sent: bit(m.sentViaWasap) });
         if (res.changes === 1) {
           inserted++;
           touch.run({ ts: m.ts, mine: bit(m.fromMe), id: m.chatId });
@@ -116,18 +126,14 @@ export class MessagesRepo {
 
   /// Newest by timestamp (not seq): backfilled history gets later seqs.
   latestKey(chatId: string): MessageKeyRef | null {
-    const r = this.db
-      .prepare('SELECT wa_id, from_me, ts, sender_jid FROM messages WHERE chat_id = ? ORDER BY ts DESC, seq DESC LIMIT 1')
-      .get(chatId) as { wa_id: string; from_me: number; ts: number; sender_jid: string | null } | undefined;
-    return r ? { waId: r.wa_id, fromMe: r.from_me === 1, ts: r.ts, senderJid: r.sender_jid } : null;
+    const r = this.db.prepare(`SELECT ${KEY_COLUMNS} FROM messages WHERE chat_id = ? ORDER BY ts DESC, seq DESC LIMIT 1`).get(chatId) as KeyRow | undefined;
+    return r ? toKeyRef(r) : null;
   }
 
   /// Reference to one stored message, for quoting it in a reply.
   keyOf(chatId: string, waId: string): MessageKeyRef | null {
-    const r = this.db
-      .prepare('SELECT wa_id, from_me, ts, sender_jid FROM messages WHERE chat_id = ? AND wa_id = ?')
-      .get(chatId, waId) as { wa_id: string; from_me: number; ts: number; sender_jid: string | null } | undefined;
-    return r ? { waId: r.wa_id, fromMe: r.from_me === 1, ts: r.ts, senderJid: r.sender_jid } : null;
+    const r = this.db.prepare(`SELECT ${KEY_COLUMNS} FROM messages WHERE chat_id = ? AND wa_id = ?`).get(chatId, waId) as KeyRow | undefined;
+    return r ? toKeyRef(r) : null;
   }
 
   lastOutgoingTs(chatId: string): number | null {

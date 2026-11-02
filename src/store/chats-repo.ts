@@ -16,6 +16,7 @@ export function rowToChat(r: Record<string, unknown>): ChatRow {
     id: String(r.id),
     kind: r.kind as ChatKind,
     title: (r.title as string | null) ?? null,
+    waJid: String(r.wa_jid ?? r.id),
     unreadCount: Number(r.unread_count),
     markedUnread: r.marked_unread === 1,
     archived: r.archived === 1,
@@ -43,10 +44,13 @@ export class ChatsRepo {
     this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO chats (id, kind, title, archived, wa_muted_until, watch_level, created_at)
-           VALUES (@id, @kind, @title, @archived, @muted, @watch, @now)
+          `INSERT INTO chats (id, kind, title, archived, wa_muted_until, watch_level, created_at, wa_jid, wa_jid_rank)
+           VALUES (@id, @kind, @title, @archived, @muted, @watch, @now, COALESCE(@waJid, @firstSeen, @id),
+                   CASE WHEN @waJid IS NULL THEN 0 ELSE (SELECT COALESCE(MAX(wa_jid_rank), 0) + 1 FROM chats) END)
            ON CONFLICT (id) DO UPDATE SET
              kind = excluded.kind,
+             wa_jid = COALESCE(@waJid, wa_jid),
+             wa_jid_rank = CASE WHEN @waJid IS NULL THEN wa_jid_rank ELSE (SELECT COALESCE(MAX(wa_jid_rank), 0) + 1 FROM chats) END,
              title = COALESCE(@title, title),
              archived = CASE WHEN @archivedGiven = 1 THEN excluded.archived ELSE archived END,
              wa_muted_until = CASE WHEN @mutedGiven = 1 THEN excluded.wa_muted_until ELSE wa_muted_until END`,
@@ -61,6 +65,8 @@ export class ChatsRepo {
           mutedGiven: bit(c.waMutedUntil !== undefined),
           watch: this.defaultWatch(c.kind),
           now: nowSec,
+          waJid: c.waJid ?? null,
+          firstSeen: c.firstSeenAs ?? null,
         });
       if (c.unread) this.applyUnread(c.id, c.unread);
     })();
@@ -144,7 +150,8 @@ export class ChatsRepo {
 
   /// Folds a duplicate chat (e.g. the @lid twin of a phone-number chat) into
   /// the surviving one. Local fields come from the older row, since that is
-  /// the one the user has been curating.
+  /// the one the user has been curating; wa_jid from the row whose JID
+  /// WhatsApp used most recently (tie: `into`).
   mergeInto(fromId: string, intoId: string): void {
     if (fromId === intoId) return;
     this.db.transaction(() => {
@@ -162,12 +169,15 @@ export class ChatsRepo {
       this.db.prepare('DELETE FROM messages WHERE chat_id = ?').run(fromId);
 
       const local = from.createdAt < into.createdAt ? from : into;
+      const rank = this.db.prepare('SELECT wa_jid_rank AS r FROM chats WHERE id = ?');
+      const seen = (rank.get(fromId) as { r: number }).r > (rank.get(intoId) as { r: number }).r ? fromId : intoId;
       const newer = from.lastMsgTs !== null && (into.lastMsgTs === null || from.lastMsgTs > into.lastMsgTs) ? from : into;
       this.db
         .prepare(
           `UPDATE chats SET watch_level = @watch, category = @category, snooze_until = @snooze, created_at = @created,
              unread_count = @unread, marked_unread = @marked, title = @title,
-             last_msg_ts = @lastTs, last_msg_from_me = @lastMine
+             last_msg_ts = @lastTs, last_msg_from_me = @lastMine,
+             (wa_jid, wa_jid_rank) = (SELECT wa_jid, wa_jid_rank FROM chats WHERE id = @seen)
            WHERE id = @id`,
         )
         .run({
@@ -181,6 +191,7 @@ export class ChatsRepo {
           title: into.title ?? from.title,
           lastTs: newer.lastMsgTs,
           lastMine: newer.lastMsgFromMe === null ? null : bit(newer.lastMsgFromMe),
+          seen,
         });
       this.db.prepare('DELETE FROM chats WHERE id = ?').run(fromId);
     })();
