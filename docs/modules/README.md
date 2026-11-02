@@ -10,3 +10,4 @@ Living docs, one per module. **Read the relevant doc before modifying a module; 
 | [config.md](config.md) | `src/config/` | `~/.wasap` path layout and zod-validated config. |
 | [daemon.md](daemon.md) | `src/daemon/` | Single-instance lock, logger, background loop, bearer token and connection snippets. |
 | [store.md](store.md) | `src/store/` | SQLite schema and repos: chats, messages (FTS), JID aliases, contacts, audit, cleanup plans. |
+| [whatsapp.md](whatsapp.md) | `src/whatsapp/` | Baileys boundary: event adapters, encrypted auth state, backoff and the gateway interface. |
