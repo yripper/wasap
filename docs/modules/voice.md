@@ -25,7 +25,7 @@ Storage and staleness logic for writing in the user's voice: one tone profile pe
 
 ## Key methods
 
-- `voiceContext`: loads the chat's category, that category's profile and the chat's notes. Profile `sentSince` = outgoing messages since the profile's `updated_at` across all chats whose current category matches (`countOutgoingInCategory`, one SQL join, uncapped). Notes `sentSince` = `MessagesRepo.countOutgoingSince([chatId], updatedAt)`. `needsLearning` = no profile or `profileStale`.
+- `voiceContext`: loads the chat's category, that category's profile and the chat's notes. Profile `sentSince` = outgoing messages since the profile's `updated_at` across all chats whose current category matches (`countOutgoingInCategory`, one SQL join, uncapped). Notes `sentSince` = `MessagesRepo.countOutgoingSince([chatId], updatedAt)`. `needsLearning` = no profile or `profileStale`. Staleness counts include messages sent through wasap (they still mean the user has been writing), but the samples Claude learns from (`outgoing` with `textOnly`) exclude them.
 - Saving is an upsert keyed by category / chat id; `updated_at` resets the staleness window.
 
 ## Dependencies

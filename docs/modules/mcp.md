@@ -62,7 +62,7 @@ All `chat_id` params are JID strings. `category` is lowercase, <= 32 chars, `/^[
 - Handler errors are logged via `describeError`, never tokens or bodies.
 
 - **Read tools never touch the gateway and never mark anything read**; only `mark_read` and `send_message` do (tested in `server.test.ts`).
-- `get_voice` returns own messages only, filtered in SQL (`MessagesRepo.outgoing(..., { textOnly: true })`: `from_me`, not deleted, non-empty text) so the limits count usable samples: `my_messages_in_chat` (<= 60) when `needsLearning` or `notesStale`, `my_messages_in_category` (<= 40, all chats in the category) when `needsLearning`.
+- `get_voice` returns own messages only, filtered in SQL (`MessagesRepo.outgoing(..., { textOnly: true })`: `from_me`, not deleted, non-empty text, not `sent_via_wasap`, so Claude-drafted replies never feed the profiles; `get_my_messages` uses the same filter) so the limits count usable samples: `my_messages_in_chat` (<= 60) when `needsLearning` or `notesStale`, `my_messages_in_category` (<= 40, all chats in the category) when `needsLearning`.
 - `cleanup_apply` takes the ids to leave (`chat_ids`), not exclusions; ids outside the plan land in `failed`.
 - `BASE_INSTRUCTIONS` tells Claude to warn that data may be stale when `get_pending`'s `connection` is not `open`. It includes the base writing style (Chilean Spanish, no voseo, short, no sign-offs, no em dashes); the optional `style.md` is appended on top.
 - Zod input errors come back as SDK "Input validation error", not `VALIDATION:`; action-level validation uses `AppError('VALIDATION')`.

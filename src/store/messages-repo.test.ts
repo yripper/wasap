@@ -117,6 +117,13 @@ describe('MessagesRepo', () => {
     expect(repo.outgoing([DM], { limit: 5 })).toHaveLength(3);
   });
 
+  it('voice samples (textOnly) skip messages sent through wasap, staleness still counts them', () => {
+    repo.insertMany([msg(DM, 'mine', 10, { fromMe: true }), msg(DM, 'drafted', 20, { fromMe: true, sentViaWasap: true })]);
+    expect(repo.outgoing([DM], { limit: 5, textOnly: true }).map((m) => m.waId)).toEqual(['mine']);
+    expect(repo.outgoing([DM], { limit: 5 }).map((m) => m.waId)).toEqual(['drafted', 'mine']);
+    expect(repo.countOutgoingSince([DM], 0)).toBe(2);
+  });
+
   it('outgoing and countOutgoingSince only see fromMe messages', () => {
     repo.insertMany([
       msg(DM, 'a', 10, { fromMe: true }),

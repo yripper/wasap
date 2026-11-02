@@ -141,15 +141,16 @@ export class MessagesRepo {
     return r.ts;
   }
 
-  /// Newest first by (ts, seq), like `history`. `textOnly` filters in SQL (not
-  /// deleted, has text) so the limit counts usable samples: a chat full of
-  /// audios or revoked messages must not shrink it.
+  /// Newest first by (ts, seq), like `history`. `textOnly` is for voice samples:
+  /// it filters in SQL (not deleted, has text, not sent through wasap) so the
+  /// limit counts usable samples. Claude-drafted replies must not feed the
+  /// profiles they were drafted from.
   outgoing(chatIds: string[], o: { limit: number; textOnly?: boolean }): MessageRow[] {
     if (chatIds.length === 0) return [];
     const marks = chatIds.map(() => '?').join(',');
     return (
       this.db
-        .prepare(`${SELECT_MESSAGE} WHERE m.from_me = 1 AND m.chat_id IN (${marks})${o.textOnly ? " AND m.deleted_at IS NULL AND m.text IS NOT NULL AND m.text != ''" : ''} ORDER BY m.ts DESC, m.seq DESC LIMIT ?`)
+        .prepare(`${SELECT_MESSAGE} WHERE m.from_me = 1 AND m.chat_id IN (${marks})${o.textOnly ?  " AND m.deleted_at IS NULL AND m.sent_via_wasap = 0 AND m.text IS NOT NULL AND m.text != ''" : ''} ORDER BY m.ts DESC, m.seq DESC LIMIT ?`)
         .all(...chatIds, o.limit) as Record<string, unknown>[]
     ).map(rowToMessage);
   }
