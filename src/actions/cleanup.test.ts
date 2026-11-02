@@ -32,6 +32,13 @@ beforeEach(() => {
 const criteria = { inactiveDays: 30, excludeFull: true } as const;
 
 describe('cleanupPlan', () => {
+  it('never re-plans a group already left (leaveGroup sets watch muted)', async () => {
+    const first = cleanupPlan(t.deps, criteria);
+    await cleanupApply(t.deps, first.id, [STALE]);
+    expect(t.chats.get(STALE)?.watchLevel).toBe('muted');
+    expect(cleanupPlan(t.deps, criteria).items.map((i) => i.chatId)).toEqual([NEVER]);
+  });
+
   it('lists inactive non-full groups with member-free stats and persists the plan', () => {
     const plan = cleanupPlan(t.deps, criteria);
     expect(plan.status).toBe('draft');

@@ -9,12 +9,14 @@ const DAY_SEC = 86_400;
 export const CLEANUP_CALL_GAP_MS = 1000;
 
 /// Step one of two: a list for the user to review, with no side effects on WhatsApp.
+/// Only `normal` groups: `full` is protected, and `muted` is where leaveGroup
+/// puts a group it left (WhatsApp keeps the chat), so it must not come back.
 export function cleanupPlan(d: ActionDeps, c: CleanupCriteria): CleanupPlan {
   const now = d.now();
   const cutoff = now - c.inactiveDays * DAY_SEC;
   const items: CleanupItem[] = d.chats
     .list({ kind: 'group', limit: 100_000, offset: 0 })
-    .filter((g) => g.watchLevel !== 'full')
+    .filter((g) => g.watchLevel === 'normal')
     .flatMap((g) => {
       const mine = d.messages.lastOutgoingTs(g.id);
       if (mine !== null && mine >= cutoff) return [];

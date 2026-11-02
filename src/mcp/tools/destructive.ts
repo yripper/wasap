@@ -21,7 +21,7 @@ export function registerDestructiveTools(server: McpServer, d: ToolDeps): void {
     'cleanup_plan',
     {
       description:
-        'Step 1 of group cleanup: list groups where the user has not sent a message in inactive_days, without changing anything. Groups on full watch are never included. Show the numbered list to the user, then call cleanup_apply with the chat ids they approved. Plans expire after 30 minutes.',
+        'Step 1 of group cleanup: list groups where the user has not sent a message in inactive_days, without changing anything. Only groups on normal watch are included (full is protected; muted covers groups already left). Show the numbered list to the user, then call cleanup_apply with the chat ids they approved. Plans expire after 30 minutes.',
       inputSchema: { inactive_days: z.number().int().min(1).max(3650) },
       annotations: LOCAL_WRITE,
     },

@@ -45,7 +45,7 @@ Everything that changes WhatsApp or the user's local organization: send, mark re
 - **WhatsApp is addressed by `chat.waJid`, never the canonical id.** Baileys copies the JID verbatim into app-state patch indexes and keys (no lid/pn translation), so `sendText`, `markRead`, `setArchived`, `setMuted` and `leaveGroup` all get `ChatRow.waJid`; the store and audit keep the canonical id. Message keys carry the raw sender (`MessageKeyRef.senderJid` comes from `sender_wa_jid`). Tests: `src/actions/wa-jid.test.ts`.
 - Invalid input uses `VALIDATION` (the existing `ErrorCode`; there is no `INVALID_INPUT`).
 - `leaveGroup` mutes watch locally; history stays searchable. DMs are rejected.
-- Cleanup never plans groups on `full` watch and re-checks that before leaving. Ids not in the plan are reported in `failed`, never acted on. A plan is single use: a second apply fails with `VALIDATION` even if the first partly failed.
+- Cleanup only plans groups on `normal` watch (`cleanup.ts:14`): never `full` (re-checked before leaving), and never `muted`, because `leaveGroup` sets `muted` and a left group stays in WhatsApp's chat list, so it would otherwise reappear in every later plan. Side effect: a group the user muted by hand is also never proposed. Ids not in the plan are reported in `failed`, never acted on. A plan is single use: a second apply fails with `VALIDATION` even if the first partly failed.
 - In cleanup, a `RATE_LIMITED` from the destructive limiter sleeps `retryAfterSec` once and retries; if it fails again the chat goes to `failed`.
 - Audit rows never contain text or titles. Never log message text.
 
