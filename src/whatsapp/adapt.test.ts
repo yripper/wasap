@@ -1,7 +1,7 @@
 import { proto } from '@whiskeysockets/baileys';
 import { describe, expect, it } from 'vitest';
 import { DM_JID, GROUP_JID, LID_JID, waMessage } from '../testing/fixtures.js';
-import { chatKind, extractText, mediaKind, toContactPairs, toWaChat, toWaEvents } from './adapt.js';
+import { chatKind, extractText, fromMuteMs, mediaKind, toContactPairs, toMuteMs, toWaChat, toWaEvents } from './adapt.js';
 import type { WaEvent } from './types.js';
 
 const T = proto.Message.ProtocolMessage.Type;
@@ -106,13 +106,15 @@ describe('toWaChat', () => {
     expect(toWaChat({ id: DM_JID }, 'update').unread).toBeNull();
   });
   it('maps kind, title, archive and mute', () => {
-    expect(toWaChat({ id: GROUP_JID, name: 'team', archived: true, muteEndTime: 1700000500 }, 'history')).toMatchObject({
+    expect(toWaChat({ id: GROUP_JID, name: 'team', archived: true, muteEndTime: 1700000500999 }, 'history')).toMatchObject({
       kind: 'group',
       title: 'team',
       archived: true,
       mutedUntil: 1700000500,
     });
     expect(toWaChat({ id: DM_JID, muteEndTime: null }, 'update').mutedUntil).toBeNull();
+    expect(toWaChat({ id: DM_JID, muteEndTime: 0 }, 'update').mutedUntil).toBeNull();
+    expect(toWaChat({ id: DM_JID, muteEndTime: -1 }, 'update').mutedUntil).toBe(-1);
     expect(toWaChat({ id: DM_JID }, 'update')).toMatchObject({ title: null, archived: null, mutedUntil: undefined });
   });
 });
@@ -127,5 +129,20 @@ describe('chatKind / toContactPairs', () => {
       contacts: [{ jid: LID_JID, name: 'Ann' }],
       aliases: [{ lid: LID_JID, pn: DM_JID }],
     });
+  });
+});
+
+describe('mute units (ms on the wire, seconds in wasap)', () => {
+  it('fromMuteMs floors ms to seconds and keeps -1 as forever', () => {
+    expect(fromMuteMs(1700000500999)).toBe(1700000500);
+    expect(fromMuteMs(-1)).toBe(-1);
+    expect(fromMuteMs(0)).toBeNull();
+    expect(fromMuteMs(null)).toBeNull();
+    expect(fromMuteMs(undefined)).toBeNull();
+  });
+  it('toMuteMs: null unmutes, -1 stays forever, seconds become ms', () => {
+    expect(toMuteMs(null)).toBeNull();
+    expect(toMuteMs(-1)).toBe(-1);
+    expect(toMuteMs(1700000500)).toBe(1700000500000);
   });
 });

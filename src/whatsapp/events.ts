@@ -1,4 +1,5 @@
 import { DisconnectReason, type Chat, type Contact, type WAMessage } from '@whiskeysockets/baileys';
+import { describeError } from '../domain/errors.js';
 import { chatKind, skipChat, toContactPairs, toWaChat, toWaEvents } from './adapt.js';
 import type { WaChat, WaEvent, WaMessage } from './types.js';
 
@@ -70,12 +71,48 @@ export function mapGroups(groups: Record<string, { id: string; subject: string }
   return chats.length > 0 ? [{ kind: 'chats', chats }] : [];
 }
 
-/// Baileys closes with a Boom error whose `output.statusCode` is a DisconnectReason.
-export function closeReason(err: unknown): 'logged_out' | 'restart_required' | 'other' {
-  const code = statusCodeOf(err);
+export type CloseKind = 'logged_out' | 'terminal' | 'restart_required' | 'retry';
+
+/// Ban safety: reconnecting after these only repeats the failure or fights another
+/// session (440 = another client took over, 403 = account blocked/forbidden,
+/// 500 = corrupt session, 411 = multi-device mismatch), so they stop the gateway
+/// without touching the auth dir. Only unknown/transient codes use backoff.
+const TERMINAL_CODES: ReadonlySet<number> = new Set([
+  DisconnectReason.connectionReplaced,
+  DisconnectReason.forbidden,
+  DisconnectReason.badSession,
+  DisconnectReason.multideviceMismatch,
+]);
+
+export function classifyClose(code: number | undefined): CloseKind {
   if (code === DisconnectReason.loggedOut) return 'logged_out';
   if (code === DisconnectReason.restartRequired) return 'restart_required';
-  return 'other';
+  if (code !== undefined && TERMINAL_CODES.has(code)) return 'terminal';
+  return 'retry';
+}
+
+/// Baileys closes with a Boom error whose `output.statusCode` is a DisconnectReason.
+/// `name` is log-safe (an enum key) and identifies why the gateway stopped.
+export function closeReason(err: unknown): { kind: CloseKind; code: number | null; name: string } {
+  const code = statusCodeOf(err);
+  const name = code === undefined ? 'unknown' : (DisconnectReason[code] ?? 'unknown');
+  return { kind: classifyClose(code), code: code ?? null, name };
+}
+
+/// Baileys' `ev.process` awaits the handler without catching, so a throw there is
+/// an unhandled rejection that kills the daemon. Errors are logged by class and
+/// message only (never the event payload).
+export function guardEvents<T>(
+  handler: (ev: T) => Promise<void>,
+  logError: (obj: { err: string }, msg: string) => void,
+): (ev: T) => Promise<void> {
+  return async (ev: T) => {
+    try {
+      await handler(ev);
+    } catch (err) {
+      logError({ err: describeError(err) }, 'whatsapp event processing failed');
+    }
+  };
 }
 
 function statusCodeOf(err: unknown): number | undefined {

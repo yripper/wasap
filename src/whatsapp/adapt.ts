@@ -114,8 +114,23 @@ export function toWaChat(c: Partial<Chat> & { id: string }, source: 'history' | 
     title: c.name ?? c.displayName ?? null,
     unread,
     archived: c.archived ?? null,
-    mutedUntil: 'muteEndTime' in c ? (c.muteEndTime ? toNumber(c.muteEndTime) : null) : undefined,
+    mutedUntil: 'muteEndTime' in c ? fromMuteMs(c.muteEndTime) : undefined,
   };
+}
+
+/// WhatsApp mute end times are epoch milliseconds, with -1 meaning "forever";
+/// wasap stores seconds. 0/null mean unmuted.
+export function fromMuteMs(ms: Parameters<typeof toNumber>[0]): number | null {
+  if (ms === null || ms === undefined) return null;
+  const n = toNumber(ms);
+  if (n === -1) return -1;
+  return n > 0 ? Math.floor(n / 1000) : null;
+}
+
+/// Inverse of `fromMuteMs` for `chatModify({ mute })`: null unmutes, -1 is forever.
+export function toMuteMs(untilSec: number | null): number | null {
+  if (untilSec === null) return null;
+  return untilSec === -1 ? -1 : untilSec * 1000;
 }
 
 export function toContactPairs(contacts: Contact[]): { contacts: { jid: string; name: string }[]; aliases: { lid: string; pn: string }[] } {

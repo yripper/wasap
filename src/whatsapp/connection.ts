@@ -18,12 +18,14 @@ export class ReconnectController {
 
   constructor(private readonly o: ReconnectOptions) {}
 
-  async handleClose(reason: 'logged_out' | 'other'): Promise<void> {
+  /// `terminal` is for closes where retrying is unsafe or pointless (see
+  /// `classifyClose` in events.ts); it reports `gave_up` without a single retry.
+  async handleClose(reason: 'logged_out' | 'terminal' | 'other'): Promise<void> {
     if (this.terminal) return;
-    if (reason === 'logged_out') {
-      // The phone removed this device; reconnecting would only fail or re-pair.
+    if (reason === 'logged_out' || reason === 'terminal') {
+      // logged_out: the phone removed this device; reconnecting would only fail or re-pair.
       this.terminal = true;
-      this.o.onState('logged_out');
+      this.o.onState(reason === 'logged_out' ? 'logged_out' : 'gave_up');
       return;
     }
     // Baileys can emit more than one close for a dying socket; one reconnect is enough.

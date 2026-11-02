@@ -89,6 +89,16 @@ describe('ReconnectController', () => {
     expect(log.connects).toBe(0);
   });
 
+  it('on terminal reports gave_up, never connects and stays stopped', async () => {
+    const { controller, log } = setup();
+    await controller.handleClose('terminal');
+    expect(log.states).toEqual(['gave_up']);
+    expect(log.connects).toBe(0);
+    expect(log.sleeps).toEqual([]);
+    await controller.handleClose('other');
+    expect(log.connects).toBe(0);
+  });
+
   it('handleOpen resets the attempt counter', async () => {
     const { controller, log } = setup();
     await controller.handleClose('other');

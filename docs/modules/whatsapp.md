@@ -31,7 +31,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 - `MessageKeyRef` is re-exported from `src/store/types.ts`.
 - `BaileysGateway.start({ authDir, crypto, getMessageText, logger })` (`gateway.ts:84`) and `stop()` (`gateway.ts:92`).
 - `runLogin({ authDir, crypto, print })` (`login.ts:22`) resolves `{ meJid }` (normalized, no device suffix).
-- `ReconnectController` (`connection.ts:14`): `handleClose(reason)`, `handleOpen()`, `stop()`.
+- `ReconnectController` (`connection.ts:14`): `handleClose('logged_out' | 'terminal' | 'other')`, `handleOpen()`, `stop()`.
 
 ## Key methods
 
@@ -39,12 +39,13 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 - `mediaKind` `adapt.ts:25`.
 - `toWaEvents` `adapt.ts:64`: one `messages` event; `protocolMessage` REVOKE/MESSAGE_EDIT become `revoke`/`edit` keyed by `protocolMessage.key.id` with the outer `remoteJid`; reactions, other protocol messages, key-distribution-only, `status@broadcast`, newsletters and messages with no text and no media kind give `[]`.
 - `toWaChat` `adapt.ts:104`: see unread gotcha.
-- `toContactPairs` `adapt.ts:121`: names plus `lid`/`pn` alias pairs from Baileys contacts.
+- `toContactPairs` `adapt.ts:136`: names plus `lid`/`pn` alias pairs from Baileys contacts.
 - `useEncryptedAuthState` `auth-state.ts:28`: files `0600` in a `0700` dir, names sanitized to `[A-Za-z0-9._-]`, write-then-rename; `clear()` deletes every file in the dir but not the dir.
 - `loadOrCreateAuthKey` `session-crypto.ts:37`: reads `SECRET_ACCOUNTS.authKey` (64 hex), creates one if missing.
 - `nextDelayMs` `backoff.ts:5`: 2s base, x2, 300s cap, +-20% jitter via injectable `random`, `null` from attempt 10.
 - `skipChat` `adapt.ts:57`: `status@broadcast` and `@newsletter` are dropped everywhere.
-- `ReconnectController.handleClose` `connection.ts:21`: `'logged_out'` emits `logged_out` and is terminal; `'other'` emits `reconnecting`, sleeps `delay(attempt)`, calls `connect`, and retries in-loop only if `connect` throws. `delay` returning `null` emits `gave_up` (terminal). A close arriving while a reconnect is in flight is ignored. `handleOpen` (`connection.ts:39`) resets the attempt counter; `stop` (`connection.ts:44`) makes it terminal, dropping a sleeping attempt.
+- `fromMuteMs` `adapt.ts:123` / `toMuteMs` `adapt.ts:131`: mute units. See the mute gotcha.
+- `ReconnectController.handleClose` `connection.ts:23`: `'logged_out'` emits `logged_out` and is terminal; `'terminal'` emits `gave_up` without any retry; `'other'` emits `reconnecting`, sleeps `delay(attempt)`, calls `connect`, and retries in-loop only if `connect` throws. `delay` returning `null` emits `gave_up` (terminal). A close arriving while a reconnect is in flight is ignored. `handleOpen` (`connection.ts:41`) resets the attempt counter; `stop` (`connection.ts:46`) makes it terminal, dropping a sleeping attempt.
 - `createSocket` `gateway.ts:31`, socket options and why:
   - `auth` with `makeCacheableSignalKeyStore` over the encrypted store (avoids a disk read+decrypt per signal key).
   - `markOnlineOnConnect: false`: the phone keeps getting notifications and contacts don't see us online.
@@ -52,19 +53,23 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
   - `shouldSyncHistoryMessage: () => true`: process every history chunk type.
   - `getMessage`: returns `{ conversation: text }` from the store so retry receipts (peer asks us to re-encrypt a sent message) work; `undefined` when unknown.
   - `logger`: child at `warn` (or the parent's level if quieter); Baileys' debug/trace logs contain full message objects.
-- Event mapping (`gateway.ts:192` via `events.ts`):
-  - `messaging-history.set` → `mapHistorySet` (`events.ts:48`): `aliases` (from `lidPnMappings` when present, else chats' `lidJid`/`pnJid`, plus contacts' lid/pn; deduped), `contacts`, `chats` (history source), `messages`, then edit/revoke events. Aliases go first so ids can be resolved before storing.
-  - `chats.upsert` → `chats` (history source); `chats.update` → `chats` (update source); `mapChats` `events.ts:29` skips entries without `id`.
-  - `messages.upsert` (both `notify` and `append`) → `mapMessages` `events.ts:17`: one merged `messages` event plus separate `edit`/`revoke`.
-  - `contacts.upsert`/`contacts.update` → `mapContacts` `events.ts:40`: `contacts` with `name ?? notify` only, plus any `aliases` the contacts carry.
-  - `connection.update` `gateway.ts:207`: `open` → controller `handleOpen`, state `open`, then `groupFetchAllParticipating` once → `mapGroups` (`events.ts:61`, `unread: null`, `archived: null`, `mutedUntil: undefined`). `close` → `closeReason` (`events.ts:74`, Boom `output.statusCode`): `loggedOut` (401) emits `logged_out`, ends the socket, then `clear()`s the auth dir; anything else (including 515) goes to the controller.
+- Event processing (`connect`, `gateway.ts:181`): each `ev.process` batch runs three steps, each wrapped in `guardEvents` (`events.ts:105`): creds save, data mapping (`handleData` `gateway.ts:205`), connection handling. Baileys' `ev.process` awaits the handler without catching (`Utils/event-buffer.ts` `process`), so an uncaught throw would be an unhandledRejection that crashes the daemon. A failure is logged at `error` with `describeError` only, and one failed step doesn't skip the others (a bad creds write must not hide a close).
+- Event mapping (`events.ts`):
+  - `messaging-history.set` → `mapHistorySet` (`events.ts:49`): `aliases` (from `lidPnMappings` when present, else chats' `lidJid`/`pnJid`, plus contacts' lid/pn; deduped), `contacts`, `chats` (history source), `messages`, then edit/revoke events. Aliases go first so ids can be resolved before storing.
+  - `chats.upsert` → `chats` (history source); `chats.update` → `chats` (update source); `mapChats` `events.ts:30` skips entries without `id`.
+  - `messages.upsert` (both `notify` and `append`) → `mapMessages` `events.ts:18`: one merged `messages` event plus separate `edit`/`revoke`.
+  - `contacts.upsert`/`contacts.update` → `mapContacts` `events.ts:41`: `contacts` with `name ?? notify` only, plus any `aliases` the contacts carry.
+  - `connection.update` `gateway.ts:217`: `open` → controller `handleOpen`, state `open`, then `groupFetchAllParticipating` once → `mapGroups` (`events.ts:62`, `unread: null`, `archived: null`, `mutedUntil: undefined`). `close` → `closeReason` (`events.ts:96`, Boom `output.statusCode` → `{ kind, code, name }`, logged at warn), classified by `classifyClose` (`events.ts:87`):
+    - `logged_out` (401): emits `logged_out`, ends the socket, then `clear()`s the auth dir.
+    - `terminal`: 440 `connectionReplaced`, 403 `forbidden`, 500 `badSession`, 411 `multideviceMismatch`. Emits `gave_up` with no retry, and the auth dir is kept. This is for ban safety: retrying fights another session or repeats a server refusal.
+    - `restart_required` (515) and `retry` (all other codes, or none): bounded backoff through the controller.
   - `creds.update` → `saveCreds()`.
-- `markRead` `gateway.ts:115`: always `chatModify({ markRead: true, lastMessages: [minimal] })`; `readMessages([key])` (blue ticks) only when `last.fromMe === false`. `minimal` (`gateway.ts:243`) is `{ key: { remoteJid, id, fromMe, participant? }, messageTimestamp }`, matching Baileys' `MinimalMessage = Pick<WAMessage, 'key' | 'messageTimestamp'>`; `participant` = `senderJid` for groups only.
+- `markRead` `gateway.ts:115`: always `chatModify({ markRead: true, lastMessages: [minimal] })`; `readMessages([key])` (blue ticks) only when `last.fromMe === false`. `minimal` (`gateway.ts:259`) is `{ key: { remoteJid, id, fromMe, participant? }, messageTimestamp }`, matching Baileys' `MinimalMessage = Pick<WAMessage, 'key' | 'messageTimestamp'>`; `participant` = `senderJid` for groups only.
 - `setArchived` `gateway.ts:124`: `chatModify({ archive, lastMessages: [minimal] })`.
-- `setMuted` `gateway.ts:130`: `chatModify({ mute: untilSec * 1000 | null })`. Units: Baileys copies `mute` verbatim into the absolute `muteAction.muteEndTimestamp` (`Utils/chat-utils.ts` `chatModificationToAppPatch`), i.e. epoch **milliseconds**. The Baileys README's "mute for 8 hours: `8*60*60*1000`" example is misleading (it is not a duration).
+- `setMuted` `gateway.ts:130`: `chatModify({ mute: toMuteMs(untilSec) })`. Baileys copies `mute` verbatim into the absolute `muteAction.muteEndTimestamp` (`Utils/chat-utils.ts` `chatModificationToAppPatch`). The Baileys README's "mute for 8 hours: `8*60*60*1000`" example reads as a duration, which is misleading.
 - `sendText` `gateway.ts:108`: returns `{ waId: sent.key.id, ts: toNumber(sent.messageTimestamp) }`. A quote needs `quoted.message` (Baileys builds `contextInfo.quotedMessage` from it and crashes without one), so `quotedMessage` (`gateway.ts:155`) fills `{ conversation: storedText ?? '' }`.
 - `groupTitle` `gateway.ts:138`: `groupMetadata(chatId).subject`, `null` on error.
-- `runLogin` `login.ts:22`: prints QR with `qrcode-terminal` `{ small: true }`; on `open` waits for pending creds writes, ends the socket and resolves; one `restartRequired` (515) after pairing reconnects immediately (protocol, not a failure), a second rejects. `loggedOut` clears stale creds and rejects `LOGGED_OUT`; other closes reject `AUTH_REQUIRED` (`login.ts:80`).
+- `runLogin` `login.ts:22`: prints QR with `qrcode-terminal` `{ small: true }`; on `open` waits for pending creds writes, ends the socket and resolves; one `restartRequired` (515) after pairing reconnects immediately (protocol, not a failure), a second rejects. `loggedOut` clears stale creds and rejects `LOGGED_OUT`; other closes reject `AUTH_REQUIRED` (`login.ts:83`). The stored creds-save chain has a no-op `.catch` so an early failure surfaces as `INTERNAL` from `finish`, not as an unhandledRejection.
 
 ## Dependencies
 
@@ -74,21 +79,20 @@ Baileys (`makeWASocket`, `makeCacheableSignalKeyStore`, `Browsers`, `DisconnectR
 
 - **LID**: Baileys 7 may give `@lid` chat ids; `senderAltJid` carries `participantAlt` (groups) or `remoteJidAlt` (DMs) so the caller can resolve aliases. Adapters never resolve them.
 - **Unread**: history sync gives an absolute count (`-1` means marked unread); `chats.update` gives increments, so `toWaChat` emits `absolute` for `'history'` and `live` for `'update'` (and `null` when the update has no `unreadCount` key). Do not mix them up.
-- `mutedUntil`: `undefined` = no info, `null` = unmuted, number = unix seconds (Baileys `muteEndTime`).
+- **Mute units**: WhatsApp uses epoch **milliseconds** on the wire (`muteEndTime` in history, `muteAction.muteEndTimestamp` in app-state sync and in `chatModify({ mute })`), with `-1` meaning muted forever. wasap stores **seconds**. `fromMuteMs` maps `>0` to `Math.floor(ms / 1000)`, `-1` to `-1`, and `0`/`null`/`undefined` to `null` (unmuted). `toMuteMs` maps `null` to `null` (unmute), `-1` to `-1`, and seconds to `* 1000`. `WaChat.mutedUntil` is `undefined` when the event carried no mute key at all (no info), `null` when unmuted, `-1` when forever, and unix seconds otherwise.
 - Timestamps are unix seconds via `toNumber` (Baileys may give `Long`).
 - Edit/revoke `ts` is the outer message's timestamp, not the target's.
 - A wrong auth key makes `useEncryptedAuthState` throw (GCM auth failure); never fall back to fresh creds on that error or the paired session is lost.
 - Never log message text or names.
 - **Gateway state**: methods throw `AppError('LOGGED_OUT')` when logged out and `AppError('INTERNAL', 'not connected (state: …)')` for any other non-`open` state (`gateway.ts:147`). `groupTitle` throws too when not open (only Baileys errors become `null`).
 - `start` throws `AUTH_REQUIRED` when the creds have no `me` (never paired). It resolves once the socket is created, not when it opens; register `onEvent` right after `start` resolves (events are network-driven, so none fire before then).
-- `logged_out` and `gave_up` are terminal for the process: nothing reconnects until the daemon restarts (after `wasap login` for the former). A 515 on the daemon's socket is handled by the normal backoff (first retry ~2s).
+- `logged_out` and `gave_up` are terminal for the process: nothing reconnects until the daemon restarts (after `wasap login` for the former). `gave_up` comes either from backoff exhaustion or from a terminal close code (the warn log names which). A 515 on the daemon's socket is handled by the normal backoff (first retry ~2s).
 - On `loggedOut` the order is: emit `logged_out`, end socket, then `clear()`; clearing first lets a queued `creds.update` write recreate files.
 - Events from a replaced socket are ignored (`sock !== this.sock` guard in `connect`, `gateway.ts:181`).
 - The reconnect sleep timer is unref'd so a pending retry never keeps a stopping process alive.
 - **Login and history**: the login socket ends right after `open`. History chunks it already processed in that window are dropped (no one listens); unprocessed ones are redelivered to the daemon's socket. Verify in the live run.
 - `messaging-history.set` field names match the brief (`chats`, `contacts`, `messages`, `lidPnMappings?` — `Types/Events.d.ts:18`). Baileys' own `Utils/history` already merges chat `lidJid`/`pnJid` into `lidPnMappings`, so the chats fallback only matters when the field is absent.
-- `mutedUntil` from Baileys `chats.update` comes from the same `muteEndTimestamp` (ms, `chat-utils.ts` `processSyncAction`); the "unix seconds" claim above is not verified for live updates.
 
 ## Testing
 
-`adapt.test.ts`, `auth-state.test.ts`, `session-crypto.test.ts`, `backoff.test.ts`, `connection.test.ts` (reconnect policy with fake `connect`/`sleep`/`delay`), `events.test.ts` (event mapping with fake payloads and fake JIDs). Run `pnpm vitest run src/whatsapp`. `BaileysGateway` and `runLogin` are not unit-tested (they need a live socket); they are verified manually against a real account.
+`adapt.test.ts`, `auth-state.test.ts`, `session-crypto.test.ts`, `backoff.test.ts`, `connection.test.ts` (reconnect policy with fake `connect`/`sleep`/`delay`), `events.test.ts` (event mapping, `classifyClose`/`closeReason`, `guardEvents` with fake payloads and fake JIDs); `adapt.test.ts` also covers the mute ms/seconds conversion. Run `pnpm vitest run src/whatsapp`. `BaileysGateway` and `runLogin` are not unit-tested (they need a live socket); they are verified manually against a real account.

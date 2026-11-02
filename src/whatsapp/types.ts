@@ -8,7 +8,7 @@ export interface WaChat {
   title: string | null;
   unread: UnreadSignal | null;
   archived: boolean | null;
-  /** Unix seconds; null = unmuted; undefined = the event carried no mute info. */
+  /** Unix seconds (WhatsApp sends ms; converted in adapt.ts); -1 = muted forever; null = unmuted; undefined = the event carried no mute info. */
   mutedUntil: number | null | undefined;
 }
 

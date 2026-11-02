@@ -1,7 +1,7 @@
 import { DisconnectReason, proto } from '@whiskeysockets/baileys';
 import { describe, expect, it } from 'vitest';
 import { DM_JID, GROUP_JID, LID_JID, waMessage } from '../testing/fixtures.js';
-import { closeReason, mapChats, mapContacts, mapGroups, mapHistorySet, mapMessages } from './events.js';
+import { classifyClose, closeReason, guardEvents, mapChats, mapContacts, mapGroups, mapHistorySet, mapMessages } from './events.js';
 import type { WaEvent } from './types.js';
 
 const PN_2 = '333@s.whatsapp.net';
@@ -127,18 +127,62 @@ describe('mapGroups', () => {
   });
 });
 
+describe('classifyClose', () => {
+  it('classifies loggedOut', () => {
+    expect(classifyClose(DisconnectReason.loggedOut)).toBe('logged_out');
+  });
+  it('classifies restartRequired', () => {
+    expect(classifyClose(DisconnectReason.restartRequired)).toBe('restart_required');
+  });
+  it('makes replaced, forbidden, bad session and multidevice mismatch terminal', () => {
+    expect(classifyClose(DisconnectReason.connectionReplaced)).toBe('terminal');
+    expect(classifyClose(DisconnectReason.forbidden)).toBe('terminal');
+    expect(classifyClose(DisconnectReason.badSession)).toBe('terminal');
+    expect(classifyClose(DisconnectReason.multideviceMismatch)).toBe('terminal');
+  });
+  it('retries everything else, including an unknown code', () => {
+    expect(classifyClose(DisconnectReason.connectionLost)).toBe('retry');
+    expect(classifyClose(DisconnectReason.connectionClosed)).toBe('retry');
+    expect(classifyClose(DisconnectReason.unavailableService)).toBe('retry');
+    expect(classifyClose(undefined)).toBe('retry');
+  });
+});
+
 describe('closeReason', () => {
   const boom = (statusCode: number) => Object.assign(new Error('closed'), { output: { statusCode } });
 
-  it('classifies loggedOut', () => {
-    expect(closeReason(boom(DisconnectReason.loggedOut))).toBe('logged_out');
+  it('reads the Boom status code and names it', () => {
+    expect(closeReason(boom(DisconnectReason.loggedOut))).toEqual({ kind: 'logged_out', code: 401, name: 'loggedOut' });
+    expect(closeReason(boom(DisconnectReason.connectionReplaced))).toEqual({ kind: 'terminal', code: 440, name: 'connectionReplaced' });
   });
-  it('classifies restartRequired', () => {
-    expect(closeReason(boom(DisconnectReason.restartRequired))).toBe('restart_required');
+  it('treats missing or non-Boom errors as retry with no code', () => {
+    expect(closeReason(undefined)).toEqual({ kind: 'retry', code: null, name: 'unknown' });
+    expect(closeReason(new Error('plain'))).toEqual({ kind: 'retry', code: null, name: 'unknown' });
   });
-  it('treats everything else, including missing errors, as other', () => {
-    expect(closeReason(boom(DisconnectReason.connectionLost))).toBe('other');
-    expect(closeReason(undefined)).toBe('other');
-    expect(closeReason(new Error('plain'))).toBe('other');
+});
+
+describe('guardEvents', () => {
+  it('logs a throwing handler at error level instead of rejecting', async () => {
+    const errors: unknown[][] = [];
+    const guarded = guardEvents(
+      async () => {
+        throw new Error('disk full');
+      },
+      (...args: unknown[]) => errors.push(args),
+    );
+    await expect(guarded({})).resolves.toBeUndefined();
+    expect(errors).toHaveLength(1);
+    expect(JSON.stringify(errors[0])).toContain('Error: disk full');
+  });
+  it('passes the event map through when nothing throws', async () => {
+    const seen: unknown[] = [];
+    const guarded = guardEvents(
+      async (ev: object) => {
+        seen.push(ev);
+      },
+      () => undefined,
+    );
+    await guarded({ 'chats.upsert': [] });
+    expect(seen).toEqual([{ 'chats.upsert': [] }]);
   });
 });

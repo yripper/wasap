@@ -39,6 +39,9 @@ function attempt(auth: Auth, print: (s: string) => void): Promise<Attempt> {
   let saving: Promise<void> = Promise.resolve();
   sock.ev.on('creds.update', () => {
     saving = saving.then(() => auth.saveCreds());
+    // Observed so an early failure isn't an unhandledRejection; `finish` still
+    // awaits the real chain and turns the failure into an INTERNAL error.
+    saving.catch(() => undefined);
   });
 
   return new Promise<Attempt>((resolve) => {
@@ -78,7 +81,7 @@ function openResult(sock: WASocket, auth: Auth): Attempt {
 }
 
 async function closeResult(err: unknown, auth: Auth): Promise<Attempt> {
-  const reason = closeReason(err);
+  const reason = closeReason(err).kind;
   if (reason === 'restart_required') return { kind: 'restart' };
   if (reason === 'logged_out') {
     // Stale creds from an earlier, revoked link: clear them so the next run shows a QR.

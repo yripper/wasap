@@ -12,11 +12,11 @@ import {
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Logger } from '../daemon/logger.js';
 import { AppError, describeError } from '../domain/errors.js';
-import { chatKind } from './adapt.js';
+import { chatKind, toMuteMs } from './adapt.js';
 import { useEncryptedAuthState } from './auth-state.js';
 import { nextDelayMs } from './backoff.js';
 import { ReconnectController } from './connection.js';
-import { closeReason, mapChats, mapContacts, mapGroups, mapHistorySet, mapMessages } from './events.js';
+import { closeReason, guardEvents, mapChats, mapContacts, mapGroups, mapHistorySet, mapMessages } from './events.js';
 import type { SessionCrypto } from './session-crypto.js';
 import type { ConnectionState, MessageKeyRef, WaEvent, WhatsAppGateway } from './types.js';
 
@@ -126,9 +126,9 @@ export class BaileysGateway implements WhatsAppGateway {
   }
 
   /// Baileys forwards `mute` verbatim as the sync action's absolute `muteEndTimestamp`
-  /// (Utils/chat-utils.ts), which WhatsApp reads as epoch milliseconds.
+  /// (Utils/chat-utils.ts): epoch ms, -1 = forever, null = unmute.
   async setMuted(chatId: string, untilSec: number | null): Promise<void> {
-    await this.openSocket().chatModify({ mute: untilSec === null ? null : untilSec * 1000 }, chatId);
+    await this.openSocket().chatModify({ mute: toMuteMs(untilSec) }, chatId);
   }
 
   async leaveGroup(chatId: string): Promise<void> {
@@ -182,15 +182,27 @@ export class BaileysGateway implements WhatsAppGateway {
     if (this.stopped) return;
     const sock = createSocket({ auth: this.auth.state, logger: this.o.logger, getMessageText: this.o.getMessageText });
     this.sock = sock;
+    const logError = (obj: { err: string }, msg: string): void => this.o.logger.error(obj, msg);
+    // Three independently guarded steps: a failed creds write or a mapper bug must
+    // neither crash the daemon nor make us miss a close (and thus a reconnect).
+    const steps = [
+      guardEvents(async (ev: Partial<BaileysEventMap>) => {
+        if (ev['creds.update']) await this.auth.saveCreds();
+      }, logError),
+      guardEvents(async (ev: Partial<BaileysEventMap>) => this.handleData(ev), logError),
+      guardEvents(async (ev: Partial<BaileysEventMap>) => {
+        const conn = ev['connection.update'];
+        if (conn) await this.handleConnection(sock, conn);
+      }, logError),
+    ];
     sock.ev.process(async (events: Partial<BaileysEventMap>) => {
       // A replaced socket can still flush buffered events; only the live one counts.
       if (sock !== this.sock) return;
-      await this.handleEvents(sock, events);
+      for (const step of steps) await step(events);
     });
   }
 
-  private async handleEvents(sock: WASocket, ev: Partial<BaileysEventMap>): Promise<void> {
-    if (ev['creds.update']) await this.auth.saveCreds();
+  private async handleData(ev: Partial<BaileysEventMap>): Promise<void> {
     const history = ev['messaging-history.set'];
     if (history) this.emitAll(mapHistorySet(history));
     if (ev['chats.upsert']) this.emitAll(mapChats(ev['chats.upsert'], 'history'));
@@ -200,8 +212,6 @@ export class BaileysGateway implements WhatsAppGateway {
     // Both `notify` (live) and `append` (sent elsewhere / offline backlog) are real messages.
     const upsert = ev['messages.upsert'];
     if (upsert) this.emitAll(mapMessages(upsert.messages));
-    const conn = ev['connection.update'];
-    if (conn) await this.handleConnection(sock, conn);
   }
 
   private async handleConnection(sock: WASocket, u: BaileysEventMap['connection.update']): Promise<void> {
@@ -215,8 +225,14 @@ export class BaileysGateway implements WhatsAppGateway {
     }
     if (u.connection !== 'close' || this.stopped) return;
     const reason = closeReason(u.lastDisconnect?.error);
-    this.o.logger.warn({ reason }, 'whatsapp connection closed');
-    if (reason === 'logged_out') {
+    this.o.logger.warn({ kind: reason.kind, code: reason.code, reason: reason.name }, 'whatsapp connection closed');
+    if (reason.kind === 'terminal') {
+      // Auth is kept: these are not logouts, and a human should look before retrying.
+      this.sock = null;
+      await this.controller.handleClose('terminal');
+      return;
+    }
+    if (reason.kind === 'logged_out') {
       await this.controller.handleClose('logged_out');
       // End first so no pending creds.update can rewrite files after the wipe.
       this.sock = null;
