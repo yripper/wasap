@@ -5,6 +5,7 @@ import { CleanupPlansRepo } from './cleanup-plans-repo.js';
 import { openDb, type Db } from './db.js';
 import { MessagesRepo } from './messages-repo.js';
 import type { NewMessage } from './types.js';
+import { VoiceRepo } from './voice-repo.js';
 
 const DM = '111@s.whatsapp.net';
 const LID = '222@lid';
@@ -182,6 +183,29 @@ describe('ChatsRepo', () => {
       repo.upsert({ id: DM, kind: 'dm', waJid: DM }, 300);
       repo.mergeInto(LID, DM);
       expect(repo.get(DM)?.waJid).toBe(DM);
+    });
+
+    it('moves chat notes to the survivor only when it has none', () => {
+      const voice = new VoiceRepo(db);
+      repo.upsert({ id: DM, kind: 'dm' }, 1);
+      repo.upsert({ id: LID, kind: 'dm' }, 2);
+      voice.saveNotes(LID, 'casual', 5);
+      repo.mergeInto(LID, DM);
+      expect(voice.getNotes(DM)).toEqual({ body: 'casual', updatedAt: 5 });
+      expect(voice.getNotes(LID)).toBeNull();
+      repo.upsert({ id: LID, kind: 'dm' }, 3);
+      voice.saveNotes(LID, 'formal', 9);
+      repo.mergeInto(LID, DM);
+      expect(voice.getNotes(DM)?.body).toBe('casual');
+      expect(voice.getNotes(LID)).toBeNull();
+    });
+
+    it('moves chat notes when the from row is renamed', () => {
+      const voice = new VoiceRepo(db);
+      repo.upsert({ id: LID, kind: 'dm' }, 1);
+      voice.saveNotes(LID, 'casual', 5);
+      repo.mergeInto(LID, DM);
+      expect(voice.getNotes(DM)?.body).toBe('casual');
     });
 
     it('renames the from row when into does not exist', () => {

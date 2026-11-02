@@ -148,6 +148,13 @@ export class ChatsRepo {
       .run({ ts, mine: bit(fromMe), id });
   }
 
+  /// Notes follow the chat; when both have notes the survivor's win and the
+  /// loser's are dropped (they'd be orphaned under a dead id otherwise).
+  private moveNotes(fromId: string, intoId: string): void {
+    this.db.prepare('UPDATE OR IGNORE chat_notes SET chat_id = ? WHERE chat_id = ?').run(intoId, fromId);
+    this.db.prepare('DELETE FROM chat_notes WHERE chat_id = ?').run(fromId);
+  }
+
   /// Folds a duplicate chat (e.g. the @lid twin of a phone-number chat) into
   /// the surviving one. Local fields come from the older row, since that is
   /// the one the user has been curating; wa_jid from the row whose JID
@@ -157,6 +164,7 @@ export class ChatsRepo {
     this.db.transaction(() => {
       const from = this.get(fromId);
       if (!from) return;
+      this.moveNotes(fromId, intoId);
       const into = this.get(intoId);
       if (!into) {
         this.db.prepare('UPDATE chats SET id = ? WHERE id = ?').run(intoId, fromId);
