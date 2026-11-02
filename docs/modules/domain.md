@@ -23,7 +23,7 @@ Pure logic with no I/O: the shared error type, rate limiting and the pending rul
 - `describeError(e)` (`errors.ts:27`): log-safe `CODE: message`.
 - `RateLimiter` (`rate-limiter.ts:6`): `tryAcquire()` returns `{ ok: true }` or `{ ok: false, retryAfterMs }`.
 - `PerKeyGap` (`rate-limiter.ts:27`): `tryAcquire(key: string)`, keys are JIDs.
-- `pendingReason(c, nowSec)` (`pending.ts:10`): `null` if archived, watch `muted` or snoozed (`snoozeUntil > nowSec`); else `'marked_unread'` if `markedUnread`; else `'unread'` if `unreadCount > 0` and (DM or watch `full`); else `null`.
+- `pendingReason(c, nowSec)` (`pending.ts:9`): `null` if archived, watch `muted` or snoozed (`snoozeUntil > nowSec`); else `'marked_unread'` if `markedUnread`; else `'unread'` if `unreadCount > 0` and (DM or watch `full`); else `null`.
 
 ## Dependencies
 
