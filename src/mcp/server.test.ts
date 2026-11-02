@@ -120,6 +120,12 @@ describe('MCP tools', () => {
     expect((await json<{ items: unknown[] }>('get_pending')).items).toEqual([]);
   });
 
+  it('list_chats hides muted chats unless watch_level is given', async () => {
+    made.t.chats.setWatchLevel(GROUP2, 'muted');
+    expect((await json<{ id: string }[]>('list_chats', { kind: 'group' })).map((c) => c.id)).toEqual([GROUP]);
+    expect((await json<{ id: string }[]>('list_chats', { watch_level: 'muted' })).map((c) => c.id)).toEqual([GROUP2]);
+  });
+
   it('mark_read says so when the chat has no stored messages', async () => {
     made.t.chats.upsert({ id: '555@s.whatsapp.net', kind: 'dm' }, 1000);
     expect(await json('mark_read', { chat_id: '555@s.whatsapp.net' })).toEqual({ marked: false, reason: 'no messages stored' });

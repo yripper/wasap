@@ -5,6 +5,8 @@ import type { ChatKind, ChatRow, ChatUpsert, UnreadSignal } from './types.js';
 export interface ChatFilter {
   kind?: ChatKind;
   watchLevel?: WatchLevel;
+  /** Leave out chats on this watch level (ignored when `watchLevel` is set). */
+  excludeWatch?: WatchLevel;
   category?: string;
   query?: string;
   limit: number;
@@ -107,6 +109,9 @@ export class ChatsRepo {
     if (f.watchLevel) {
       where.push('watch_level = @watch');
       params.watch = f.watchLevel;
+    } else if (f.excludeWatch) {
+      where.push('watch_level != @notWatch');
+      params.notWatch = f.excludeWatch;
     }
     if (f.category) {
       where.push('category = @category');

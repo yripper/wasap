@@ -36,7 +36,7 @@ The MCP server Claude talks to: Streamable HTTP on `127.0.0.1` with bearer-token
 
 | Group | Tools | Annotations |
 |---|---|---|
-| read (`read.ts`) | `status`, `list_chats`, `get_pending` (returns `{ connection, items }`; `connection` is `gateway.state()` so Claude can warn that a non-open mirror may be stale), `read_history` (limit <= 100, `before_seq` = seq of the oldest message already seen; keyset on `(ts, seq)`, see store.md), `search_messages`, `get_chat_info` | `READ` |
+| read (`read.ts`) | `status`, `list_chats` (hides `muted` watch unless `watch_level` is given, via `ChatFilter.excludeWatch`), `get_pending` (returns `{ connection, items }`; `connection` is `gateway.state()` so Claude can warn that a non-open mirror may be stale), `read_history` (limit <= 100, `before_seq` = seq of the oldest message already seen; keyset on `(ts, seq)`, see store.md), `search_messages`, `get_chat_info` | `READ` |
 | tracking (`tracking.ts`) | `snooze` (ISO with offset, future), `unsnooze`, `set_watch_level`, `set_category` | `LOCAL_WRITE` |
 | voice (`voice.ts`) | `get_voice`, `get_my_messages` (exactly one of `chat_id` / `category`, limit <= 200), `list_stale_profiles` (`READ`); `save_profile` (body <= 4000), `save_chat_notes` (body <= 2000) (`LOCAL_WRITE`) | |
 | messaging (`messaging.ts`) | `send_message` (also marks read), `mark_read` (`{ marked: true }` or `{ marked: false, reason: 'no messages stored' }`) | `WHATSAPP_WRITE` |

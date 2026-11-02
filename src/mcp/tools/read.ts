@@ -19,7 +19,8 @@ export function registerReadTools(server: McpServer, d: ToolDeps): void {
   server.registerTool(
     'list_chats',
     {
-      description: 'List chats from the local mirror, most recent first. Filter by kind, watch level, category, or title/id text.',
+      description:
+        'List chats from the local mirror, most recent first. Filter by kind, watch level, category, or title/id text. Muted-watch chats (including groups already left) are hidden unless watch_level is given.',
       inputSchema: {
         kind: z.enum(['dm', 'group']).optional(),
         watch_level: z.enum(['full', 'normal', 'muted']).optional(),
@@ -34,7 +35,8 @@ export function registerReadTools(server: McpServer, d: ToolDeps): void {
       run(() => {
         const now = d.actions.now();
         return d.actions.chats
-          .list({ kind: a.kind, watchLevel: a.watch_level, category: a.category, query: a.query, limit: a.limit, offset: a.offset })
+          // Spec: muted hides a chat from listings; asking for a level explicitly still shows it.
+          .list({ kind: a.kind, watchLevel: a.watch_level, excludeWatch: 'muted', category: a.category, query: a.query, limit: a.limit, offset: a.offset })
           .map((c) => formatChat(c, now));
       }),
   );
