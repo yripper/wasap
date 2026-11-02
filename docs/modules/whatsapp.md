@@ -6,7 +6,7 @@
 
 ## Purpose
 
-The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects into domain events, keeps the WhatsApp session encrypted at rest, and defines the gateway interface the rest of the daemon uses. Also owns the live Baileys socket (`BaileysGateway`), its bounded reconnect policy and the QR login flow.
+The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects into domain events, keeps the WhatsApp session encrypted at rest, and defines the gateway interface the rest of the daemon uses. Also owns the live Baileys socket (`BaileysGateway`), its reconnect policy and the QR login flow.
 
 ## Structure
 
@@ -17,7 +17,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 | `src/whatsapp/auth-state.ts` | `useEncryptedAuthState`: AES-GCM file-per-key auth store |
 | `src/whatsapp/session-crypto.ts` | `SessionCrypto` (AES-256-GCM) and `loadOrCreateAuthKey` (Keychain-backed key) |
 | `src/whatsapp/backoff.ts` | Reconnect delay schedule |
-| `src/whatsapp/connection.ts` | `ReconnectController`: bounded reconnect policy, Baileys-free |
+| `src/whatsapp/connection.ts` | `ReconnectController`: reconnect policy (stable-open reset, never gives up on retry-class closes), Baileys-free |
 | `src/whatsapp/events.ts` | Pure Baileys event payload to `WaEvent[]` mapping, `closeReason` |
 | `src/whatsapp/gateway.ts` | `createSocket` (shared socket options) and `BaileysGateway` |
 | `src/whatsapp/login.ts` | `runLogin` (QR pairing in the terminal), `linkStatus`, `wipeAuthDir`, `prepareLogin`, `runLogout` |
@@ -46,10 +46,10 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 - `toContactPairs` `adapt.ts:136`: names plus `lid`/`pn` alias pairs from Baileys contacts.
 - `useEncryptedAuthState` `auth-state.ts:28`: files `0600` in a `0700` dir, names sanitized to `[A-Za-z0-9._-]`, write-then-rename; `clear()` deletes every file in the dir but not the dir.
 - `loadOrCreateAuthKey` `session-crypto.ts:37`: reads `SECRET_ACCOUNTS.authKey` (64 hex), creates one if missing.
-- `nextDelayMs` `backoff.ts:5`: 2s base, x2, 300s cap, +-20% jitter via injectable `random`, `null` from attempt 10.
+- `nextDelayMs` `backoff.ts:7`: 2s base, x2, 300s cap, +-20% jitter via injectable `random`; from attempt 10 (`maxAttempts`) it stays at the cap forever (never `null`).
 - `skipChat` `adapt.ts:57`: `status@broadcast` and `@newsletter` are dropped everywhere.
 - `fromMuteMs` `adapt.ts:123` / `toMuteMs` `adapt.ts:131`: mute units. See the mute gotcha.
-- `ReconnectController.handleClose` `connection.ts:23`: `'logged_out'` emits `logged_out` and is terminal; `'terminal'` emits `gave_up` without any retry; `'other'` emits `reconnecting`, sleeps `delay(attempt)`, calls `connect`, and retries in-loop only if `connect` throws. `delay` returning `null` emits `gave_up` (terminal). A close arriving while a reconnect is in flight is ignored. `handleOpen` (`connection.ts:41`) resets the attempt counter; `stop` (`connection.ts:46`) makes it terminal, dropping a sleeping attempt.
+- `ReconnectController.handleClose` `connection.ts:31`: `'logged_out'` emits `logged_out` and is terminal; `'terminal'` emits `gave_up` without any retry; `'other'` emits `reconnecting`, sleeps `delay(attempt)`, calls `connect`, and retries in-loop only if `connect` throws. Retry-class closes never give up: past `BACKOFF.maxAttempts` the delay stays at `capMs` (300 s, ±20% jitter). A close arriving while a reconnect is in flight is ignored. `handleOpen` (`connection.ts:52`) does **not** reset the attempt counter right away: it schedules a reset after `STABLE_OPEN_MS` (60 s, `connection.ts:5`) through the injected `schedule`, and any close (or `stop`) cancels that pending reset, so open-then-close flapping keeps backing off instead of retrying every ~2 s. `stop` (`connection.ts:61`) makes it terminal, dropping a sleeping attempt.
 - `createSocket` `gateway.ts:31`, socket options and why:
   - `auth` with `makeCacheableSignalKeyStore` over the encrypted store (avoids a disk read+decrypt per signal key).
   - `markOnlineOnConnect: false`: the phone keeps getting notifications and contacts don't see us online.
@@ -66,7 +66,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
   - `connection.update` `gateway.ts:228`: `open` → controller `handleOpen`, state `open`, then `groupFetchAllParticipating` once → `mapGroups` (`events.ts:62`, `unread: null`, `archived: null`, `mutedUntil: undefined`). `close` → `closeReason` (`events.ts:96`, Boom `output.statusCode` → `{ kind, code, name }`, logged at warn), classified by `classifyClose` (`events.ts:87`):
     - `logged_out` (401): emits `logged_out`, ends the socket, then `clear()`s the auth dir.
     - `terminal`: 440 `connectionReplaced`, 403 `forbidden`, 500 `badSession`, 411 `multideviceMismatch`. Emits `gave_up` with no retry, and the auth dir is kept. This is for ban safety: retrying fights another session or repeats a server refusal.
-    - `restart_required` (515) and `retry` (all other codes, or none): bounded backoff through the controller.
+    - `restart_required` (515) and `retry` (all other codes, or none): exponential backoff through the controller, then retries every ~`capMs` indefinitely.
   - `creds.update` → `saveCreds()`.
 - `markRead` `gateway.ts:126`: always `chatModify({ markRead: true, lastMessages: [minimal] })`; `readMessages([key])` (blue ticks) only when `last.fromMe === false`. `minimal` (`gateway.ts:270`) is `{ key: { remoteJid, id, fromMe, participant? }, messageTimestamp }`, matching Baileys' `MinimalMessage = Pick<WAMessage, 'key' | 'messageTimestamp'>`; `participant` = `senderJid` for groups only.
 - `setArchived` `gateway.ts:135`: `chatModify({ archive, lastMessages: [minimal] })`.
@@ -91,7 +91,7 @@ Baileys (`makeWASocket`, `makeCacheableSignalKeyStore`, `Browsers`, `DisconnectR
 - `runLogout` does not save creds updates from its short-lived socket; the files are wiped right after. It clears locally even when the remote logout fails, so the phone may still list the device (the CLI tells the user to remove it there).
 - **Gateway state**: methods throw `AppError('LOGGED_OUT')` when logged out and `AppError('INTERNAL', 'not connected (state: …)')` for any other non-`open` state (`gateway.ts:158`). `groupTitle` throws too when not open (only Baileys errors become `null`).
 - `start` throws `AUTH_REQUIRED` when the creds have no `me` (never paired) or can't be decrypted (the files are not touched; recovery is `wasap login --force`). It resolves once the socket is created, not when it opens; register `onEvent` right after `start` resolves (events are network-driven, so none fire before then).
-- `logged_out` and `gave_up` are terminal for the process: nothing reconnects until the daemon restarts (after `wasap login` for the former). `gave_up` comes either from backoff exhaustion or from a terminal close code (the warn log names which). A 515 on the daemon's socket is handled by the normal backoff (first retry ~2s).
+- `logged_out` and `gave_up` are terminal for the process: nothing reconnects until the daemon restarts (after `wasap login` for the former). `gave_up` comes only from a terminal close code (the warn log names it); network-style failures stay in `reconnecting`. A 515 on the daemon's socket is handled by the normal backoff (first retry ~2s).
 - On `loggedOut` the order is: emit `logged_out`, end socket, then `clear()`; clearing first lets a queued `creds.update` write recreate files.
 - Events from a replaced socket are ignored (`sock !== this.sock` guard in `connect`, `gateway.ts:192`).
 - The reconnect sleep timer is unref'd so a pending retry never keeps a stopping process alive.

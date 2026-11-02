@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { ReconnectController } from './connection.js';
+import { ReconnectController, STABLE_OPEN_MS } from './connection.js';
 import type { ConnectionState } from './types.js';
 
-function setup(opts: { delays?: (number | null)[]; failConnects?: number } = {}) {
-  const delays = opts.delays ?? [10, 20, 40, null];
+interface Timer {
+  ms: number;
+  fn: () => void;
+  cancelled: boolean;
+}
+
+function setup(opts: { delays?: number[]; failConnects?: number } = {}) {
+  const delays = opts.delays ?? [10, 20, 40, 80];
   let failures = opts.failConnects ?? 0;
   const log = {
     connects: 0,
     sleeps: [] as number[],
     delayCalls: [] as number[],
     states: [] as ConnectionState[],
+    timers: [] as Timer[],
   };
   const controller = new ReconnectController({
     connect: async () => {
@@ -24,13 +31,23 @@ function setup(opts: { delays?: (number | null)[]; failConnects?: number } = {})
     },
     delay: (attempt: number) => {
       log.delayCalls.push(attempt);
-      return delays[attempt] ?? null;
+      return delays[attempt] ?? 999;
     },
     onState: (s: ConnectionState) => {
       log.states.push(s);
     },
+    schedule: (fn: () => void, ms: number) => {
+      const t: Timer = { ms, fn, cancelled: false };
+      log.timers.push(t);
+      return () => {
+        t.cancelled = true;
+      };
+    },
   });
-  return { controller, log };
+  const fireTimers = (): void => {
+    for (const t of log.timers) if (!t.cancelled) t.fn();
+  };
+  return { controller, log, fireTimers };
 }
 
 describe('ReconnectController', () => {
@@ -53,30 +70,19 @@ describe('ReconnectController', () => {
     expect(log.connects).toBe(3);
   });
 
-  it('gives up once delay returns null and stops reconnecting', async () => {
-    const { controller, log } = setup({ delays: [10, null] });
-    await controller.handleClose('other');
-    await controller.handleClose('other');
-    expect(log.connects).toBe(1);
-    expect(log.states).toEqual(['reconnecting', 'gave_up']);
-    await controller.handleClose('other');
-    expect(log.connects).toBe(1);
-    expect(log.states).toEqual(['reconnecting', 'gave_up']);
+  it('never gives up on retry-class closes: past the schedule it keeps retrying', async () => {
+    const { controller, log } = setup({ delays: [10, 20] });
+    for (let i = 0; i < 5; i++) await controller.handleClose('other');
+    expect(log.connects).toBe(5);
+    expect(log.sleeps).toEqual([10, 20, 999, 999, 999]);
+    expect(log.states).not.toContain('gave_up');
   });
 
-  it('keeps retrying with the next delay when connect itself throws', async () => {
-    const { controller, log } = setup({ failConnects: 2 });
+  it('keeps retrying when connect keeps throwing', async () => {
+    const { controller, log } = setup({ delays: [10, 20], failConnects: 4 });
     await controller.handleClose('other');
-    expect(log.delayCalls).toEqual([0, 1, 2]);
-    expect(log.sleeps).toEqual([10, 20, 40]);
-    expect(log.connects).toBe(3);
-  });
-
-  it('gives up when connect keeps throwing until delays run out', async () => {
-    const { controller, log } = setup({ delays: [10, 20, null], failConnects: 5 });
-    await controller.handleClose('other');
-    expect(log.connects).toBe(2);
-    expect(log.states.at(-1)).toBe('gave_up');
+    expect(log.connects).toBe(5);
+    expect(log.states).not.toContain('gave_up');
   });
 
   it('on logged_out reports logged_out and never connects', async () => {
@@ -99,14 +105,37 @@ describe('ReconnectController', () => {
     expect(log.connects).toBe(0);
   });
 
-  it('handleOpen resets the attempt counter', async () => {
-    const { controller, log } = setup();
+  it('resets the attempt counter only after the socket stays open for the stable period', async () => {
+    const { controller, log, fireTimers } = setup();
     await controller.handleClose('other');
     await controller.handleClose('other');
     controller.handleOpen();
+    expect(log.timers.map((t) => t.ms)).toEqual([STABLE_OPEN_MS]);
+    fireTimers();
     await controller.handleClose('other');
     expect(log.delayCalls).toEqual([0, 1, 0]);
     expect(log.sleeps).toEqual([10, 20, 10]);
+  });
+
+  it('open-then-close flapping keeps backing off instead of resetting', async () => {
+    const { controller, log, fireTimers } = setup();
+    for (let i = 0; i < 4; i++) {
+      await controller.handleClose('other');
+      controller.handleOpen();
+    }
+    await controller.handleClose('other');
+    // The pending reset timers were cancelled by each close, so firing them does nothing.
+    expect(log.timers.every((t) => t.cancelled)).toBe(true);
+    fireTimers();
+    await controller.handleClose('other');
+    expect(log.delayCalls).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('stop() cancels a pending stable-open reset', () => {
+    const { controller, log } = setup();
+    controller.handleOpen();
+    controller.stop();
+    expect(log.timers[0]?.cancelled).toBe(true);
   });
 
   it('ignores a close that arrives while a reconnect is already in flight', async () => {
@@ -123,6 +152,7 @@ describe('ReconnectController', () => {
         }),
       delay: () => 5,
       onState: (s: ConnectionState) => states.push(s),
+      schedule: () => () => undefined,
     });
     const first = controller.handleClose('other');
     await controller.handleClose('other');
@@ -144,6 +174,7 @@ describe('ReconnectController', () => {
         }),
       delay: () => 5,
       onState: () => undefined,
+      schedule: () => () => undefined,
     });
     const pending = controller.handleClose('other');
     controller.stop();

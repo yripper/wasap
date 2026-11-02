@@ -15,8 +15,8 @@ describe('nextDelayMs', () => {
     expect(nextDelayMs(0, () => 0)).toBe(1600);
     expect(nextDelayMs(0, () => 1)).toBe(2400);
   });
-  it('gives up after maxAttempts', () => {
-    expect(nextDelayMs(10)).toBeNull();
-    expect(nextDelayMs(20)).toBeNull();
+  it('keeps retrying at capMs after maxAttempts instead of giving up', () => {
+    expect(nextDelayMs(BACKOFF.maxAttempts, () => 0.5)).toBe(BACKOFF.capMs);
+    expect(nextDelayMs(1000, () => 0.5)).toBe(BACKOFF.capMs);
   });
 });

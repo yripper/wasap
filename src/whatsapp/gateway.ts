@@ -80,6 +80,11 @@ export class BaileysGateway implements WhatsAppGateway {
       sleep: (ms: number) => sleep(ms, undefined, { ref: false }),
       delay: (attempt: number) => nextDelayMs(attempt),
       onState: (s: ConnectionState) => this.setState(s),
+      schedule: (fn: () => void, ms: number) => {
+        const t = setTimeout(fn, ms);
+        t.unref();
+        return () => clearTimeout(t);
+      },
     });
   }
 
