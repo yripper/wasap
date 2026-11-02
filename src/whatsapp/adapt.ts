@@ -58,9 +58,26 @@ export function skipChat(jid: string): boolean {
   return jid === 'status@broadcast' || jid.endsWith('@newsletter');
 }
 
-/// Maps one Baileys message to zero or more domain events. Reactions, key
-/// distribution, non-edit/revoke protocol messages and messages with neither
-/// text nor a known media kind produce nothing.
+/// Keys that are never a message the user sees in the chat. Anything else that
+/// has neither text nor a known media kind (polls, ptv, events, templates...)
+/// is still stored as media kind 'other': dropping it would make an older
+/// message look like the latest one (pending's latest_incoming, mark-read anchor).
+const NOT_CONTENT = new Set([
+  'senderKeyDistributionMessage',
+  'messageContextInfo',
+  'reactionMessage',
+  'encReactionMessage',
+  'pollUpdateMessage',
+  'encEventResponseMessage',
+]);
+
+function hasContent(c: Content): boolean {
+  return Object.entries(c).some(([k, v]) => v !== null && v !== undefined && !NOT_CONTENT.has(k));
+}
+
+/// Maps one Baileys message to zero or more domain events. Reactions, poll and
+/// event votes, key distribution and non-edit/revoke protocol messages produce
+/// nothing; unknown content types become mediaKind 'other'.
 export function toWaEvents(m: WAMessage): WaEvent[] {
   const chatId = m.key.remoteJid;
   const waId = m.key.id;
@@ -80,11 +97,10 @@ export function toWaEvents(m: WAMessage): WaEvent[] {
     }
     return [];
   }
-  if (content.reactionMessage) return [];
+  if (content.reactionMessage || content.pollUpdateMessage || !hasContent(content)) return [];
 
   const text = extractText(content);
-  const media = mediaKind(content);
-  if (text === null && media === null) return [];
+  const media = mediaKind(content) ?? (text === null ? 'other' : null);
 
   const message: WaMessage = {
     chatId,

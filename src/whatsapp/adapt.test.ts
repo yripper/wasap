@@ -70,13 +70,23 @@ describe('toWaEvents', () => {
     const [m] = toWaEvents(waMessage({ message: { audioMessage: {} } }));
     expect(m).toMatchObject({ messages: [{ text: null, mediaKind: 'audio' }] });
   });
+  it('stores message types it cannot render as other, so anchors stay right', () => {
+    for (const message of [{ pollCreationMessageV3: { name: 'q' } }, { ptvMessage: {} }, { eventMessage: {} }, { templateMessage: {} }, { interactiveMessage: {} }]) {
+      const [e] = toWaEvents(waMessage({ message }));
+      expect(e).toMatchObject({ kind: 'messages', messages: [{ text: null, mediaKind: 'other' }] });
+    }
+    // Sender-key distribution riding along with real content does not hide it.
+    const [e] = toWaEvents(waMessage({ message: { senderKeyDistributionMessage: { groupId: GROUP_JID }, pollCreationMessage: {} } }));
+    expect(e).toMatchObject({ messages: [{ mediaKind: 'other' }] });
+  });
   it('ignores noise', () => {
     expect(toWaEvents(waMessage({ message: { reactionMessage: { text: '+' } } }))).toEqual([]);
     expect(toWaEvents(waMessage({ message: { senderKeyDistributionMessage: { groupId: GROUP_JID } } }))).toEqual([]);
     expect(toWaEvents(waMessage({ chat: 'status@broadcast' }))).toEqual([]);
     expect(toWaEvents(waMessage({ chat: '555@newsletter' }))).toEqual([]);
     expect(toWaEvents(waMessage({ message: null }))).toEqual([]);
-    expect(toWaEvents(waMessage({ message: { pollCreationMessage: {} } }))).toEqual([]);
+    expect(toWaEvents(waMessage({ message: { senderKeyDistributionMessage: { groupId: GROUP_JID }, messageContextInfo: {} } }))).toEqual([]);
+    expect(toWaEvents(waMessage({ message: { pollUpdateMessage: {} } }))).toEqual([]);
     expect(toWaEvents(waMessage({ message: { protocolMessage: { type: T.EPHEMERAL_SETTING } } }))).toEqual([]);
   });
   it('maps an edit using the target key id', () => {

@@ -34,6 +34,12 @@ export interface PendingView extends ChatView {
   latest_incoming: MessageView | null;
 }
 
+/// 'other' is any WhatsApp type wasap can't render (poll, event, template...).
+function mediaLabel(kind: string | null): string {
+  if (kind === null) return '';
+  return kind === 'other' ? '[unsupported]' : `[${kind}]`;
+}
+
 export function formatMessage(m: MessageRow): MessageView {
   return {
     seq: m.seq,
@@ -41,7 +47,7 @@ export function formatMessage(m: MessageRow): MessageView {
     // Group rows carry the participant; in a DM the sender is the chat itself.
     from: m.fromMe ? 'me' : { jid: m.senderJid ?? m.chatId, name: m.senderName },
     // Media-only messages still need something readable in a transcript.
-    text: m.deletedAt !== null ? '[deleted]' : m.text || (m.mediaKind ? `[${m.mediaKind}]` : ''),
+    text: m.deletedAt !== null ? '[deleted]' : m.text || mediaLabel(m.mediaKind),
     media: m.mediaKind,
     quoted_id: m.quotedId,
     edited: m.editedAt !== null,

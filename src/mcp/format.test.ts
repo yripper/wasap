@@ -13,6 +13,10 @@ const chat = (over: Partial<ChatRow>): ChatRow => ({
 });
 
 describe('formatMessage', () => {
+  it('renders an unsupported message type as [unsupported]', () => {
+    expect(formatMessage(msg({ text: null, mediaKind: 'other' })).text).toBe('[unsupported]');
+  });
+
   it('renders an audio-only message as [audio]', () => {
     const v = formatMessage(msg({ text: null, mediaKind: 'audio' }));
     expect(v.text).toBe('[audio]');
