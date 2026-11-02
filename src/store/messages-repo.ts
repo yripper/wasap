@@ -3,7 +3,7 @@ import type { MessageKeyRef, MessageRow, NewMessage } from './types.js';
 
 const bit = (b: boolean): number => (b ? 1 : 0);
 
-function rowToMessage(r: Record<string, unknown>): MessageRow {
+export function rowToMessage(r: Record<string, unknown>): MessageRow {
   return {
     seq: Number(r.seq),
     chatId: String(r.chat_id),

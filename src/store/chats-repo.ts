@@ -11,7 +11,7 @@ export interface ChatFilter {
   offset: number;
 }
 
-function rowToChat(r: Record<string, unknown>): ChatRow {
+export function rowToChat(r: Record<string, unknown>): ChatRow {
   return {
     id: String(r.id),
     kind: r.kind as ChatKind,
