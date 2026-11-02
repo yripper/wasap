@@ -53,7 +53,8 @@ function senderOf(m: WAMessage, chatId: string): { senderJid: string | null; sen
   return { senderJid: chatId, senderAltJid: m.key.remoteJidAlt ?? null };
 }
 
-function skipChat(jid: string): boolean {
+/// Status broadcasts and channels are not conversations wasap tracks.
+export function skipChat(jid: string): boolean {
   return jid === 'status@broadcast' || jid.endsWith('@newsletter');
 }
 
