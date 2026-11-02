@@ -80,11 +80,26 @@ export class MessagesRepo {
     this.db.prepare('UPDATE messages SET deleted_at = ?, text = NULL WHERE chat_id = ? AND wa_id = ? AND deleted_at IS NULL').run(deletedAt, chatId, waId);
   }
 
+  /// Newest first by (ts, seq): history sync sends newest chunks first, so seq
+  /// alone would put backfilled older messages on top. `beforeSeq` is a keyset
+  /// cursor on that same (ts, seq) order; a seq not in this chat yields nothing.
   history(chatId: string, o: { limit: number; beforeSeq?: number }): MessageRow[] {
+    if (o.beforeSeq === undefined) {
+      return (
+        this.db
+          .prepare(`${SELECT_MESSAGE} WHERE m.chat_id = ? ORDER BY m.ts DESC, m.seq DESC LIMIT ?`)
+          .all(chatId, o.limit) as Record<string, unknown>[]
+      ).map(rowToMessage);
+    }
+    const cursor = this.db.prepare('SELECT ts FROM messages WHERE chat_id = ? AND seq = ?').get(chatId, o.beforeSeq) as { ts: number } | undefined;
+    if (!cursor) return [];
     return (
       this.db
-        .prepare(`${SELECT_MESSAGE} WHERE m.chat_id = ? AND m.seq < ? ORDER BY m.seq DESC LIMIT ?`)
-        .all(chatId, o.beforeSeq ?? Number.MAX_SAFE_INTEGER, o.limit) as Record<string, unknown>[]
+        .prepare(
+          `${SELECT_MESSAGE} WHERE m.chat_id = @chatId AND (m.ts < @ts OR (m.ts = @ts AND m.seq < @seq))
+           ORDER BY m.ts DESC, m.seq DESC LIMIT @limit`,
+        )
+        .all({ chatId, ts: cursor.ts, seq: o.beforeSeq, limit: o.limit }) as Record<string, unknown>[]
     ).map(rowToMessage);
   }
 
@@ -95,7 +110,7 @@ export class MessagesRepo {
     if (o.chatId !== undefined) params.chatId = o.chatId;
     const sql = `${SELECT_MESSAGE} JOIN messages_fts f ON f.rowid = m.seq
                  WHERE messages_fts MATCH @fts AND m.deleted_at IS NULL ${o.chatId !== undefined ? 'AND m.chat_id = @chatId' : ''}
-                 ORDER BY m.ts DESC LIMIT @limit`;
+                 ORDER BY m.ts DESC, m.seq DESC LIMIT @limit`;
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map(rowToMessage);
   }
 
@@ -120,14 +135,15 @@ export class MessagesRepo {
     return r.ts;
   }
 
-  /// `textOnly` filters in SQL (not deleted, has text) so the limit counts usable
-  /// samples: a chat full of audios or revoked messages must not shrink it.
+  /// Newest first by (ts, seq), like `history`. `textOnly` filters in SQL (not
+  /// deleted, has text) so the limit counts usable samples: a chat full of
+  /// audios or revoked messages must not shrink it.
   outgoing(chatIds: string[], o: { limit: number; textOnly?: boolean }): MessageRow[] {
     if (chatIds.length === 0) return [];
     const marks = chatIds.map(() => '?').join(',');
     return (
       this.db
-        .prepare(`${SELECT_MESSAGE} WHERE m.from_me = 1 AND m.chat_id IN (${marks})${o.textOnly ? " AND m.deleted_at IS NULL AND m.text IS NOT NULL AND m.text != ''" : ''} ORDER BY m.seq DESC LIMIT ?`)
+        .prepare(`${SELECT_MESSAGE} WHERE m.from_me = 1 AND m.chat_id IN (${marks})${o.textOnly ? " AND m.deleted_at IS NULL AND m.text IS NOT NULL AND m.text != ''" : ''} ORDER BY m.ts DESC, m.seq DESC LIMIT ?`)
         .all(...chatIds, o.limit) as Record<string, unknown>[]
     ).map(rowToMessage);
   }

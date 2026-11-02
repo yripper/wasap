@@ -48,6 +48,32 @@ describe('MessagesRepo', () => {
     expect(repo.history(GROUP, { limit: 1 })).toHaveLength(1);
   });
 
+  it('history orders by timestamp: a later, older history chunk does not jump ahead', () => {
+    // History sync delivers newest-first, then FULL chunks with older messages (higher seqs).
+    repo.insertMany([msg(DM, 'n3', 30), msg(DM, 'n2', 20)]);
+    repo.insertMany([msg(DM, 'o1', 10), msg(DM, 'o0', 5)]);
+    repo.insertMany([msg(DM, 'tie-a', 20)]);
+    const all = repo.history(DM, { limit: 10 });
+    expect(all.map((m) => m.waId)).toEqual(['n3', 'tie-a', 'n2', 'o1', 'o0']);
+    const pages: string[] = [];
+    let before: number | undefined;
+    for (;;) {
+      const page = repo.history(DM, { limit: 2, beforeSeq: before });
+      if (page.length === 0) break;
+      pages.push(...page.map((m) => m.waId));
+      before = page[page.length - 1]?.seq;
+    }
+    expect(pages).toEqual(['n3', 'tie-a', 'n2', 'o1', 'o0']);
+    expect(repo.history(DM, { limit: 5, beforeSeq: 9999 })).toEqual([]);
+  });
+
+  it('outgoing returns the newest by timestamp, not by insertion order', () => {
+    repo.insertMany([msg(DM, 'new', 30, { fromMe: true })]);
+    repo.insertMany([msg(DM, 'old', 10, { fromMe: true })]);
+    expect(repo.outgoing([DM], { limit: 1 }).map((m) => m.waId)).toEqual(['new']);
+    expect(repo.outgoing([DM], { limit: 1, textOnly: true }).map((m) => m.waId)).toEqual(['new']);
+  });
+
   it('softDelete nulls text, sets deletedAt and removes it from search', () => {
     repo.insertMany([msg(DM, 'a', 1, { text: 'secretword' })]);
     repo.softDelete(DM, 'a', 99);

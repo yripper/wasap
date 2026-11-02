@@ -94,4 +94,8 @@ export const MIGRATIONS: readonly string[] = [
     updated_at INTEGER NOT NULL
   );
   `,
+  // Newest-first reads (history, outgoing, latestKey) order by (ts, seq).
+  `
+  CREATE INDEX messages_chat_ts_seq ON messages (chat_id, ts, seq);
+  `,
 ];

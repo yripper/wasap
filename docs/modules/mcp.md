@@ -36,7 +36,7 @@ The MCP server Claude talks to: Streamable HTTP on `127.0.0.1` with bearer-token
 
 | Group | Tools | Annotations |
 |---|---|---|
-| read (`read.ts`) | `status`, `list_chats`, `get_pending`, `read_history` (limit <= 100, `before_seq`), `search_messages`, `get_chat_info` | `READ` |
+| read (`read.ts`) | `status`, `list_chats`, `get_pending`, `read_history` (limit <= 100, `before_seq` = seq of the oldest message already seen; keyset on `(ts, seq)`, see store.md), `search_messages`, `get_chat_info` | `READ` |
 | tracking (`tracking.ts`) | `snooze` (ISO with offset, future), `unsnooze`, `set_watch_level`, `set_category` | `LOCAL_WRITE` |
 | voice (`voice.ts`) | `get_voice`, `get_my_messages` (exactly one of `chat_id` / `category`, limit <= 200), `list_stale_profiles` (`READ`); `save_profile` (body <= 4000), `save_chat_notes` (body <= 2000) (`LOCAL_WRITE`) | |
 | messaging (`messaging.ts`) | `send_message` (also marks read), `mark_read` | `WHATSAPP_WRITE` |

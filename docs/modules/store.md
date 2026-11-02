@@ -13,7 +13,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 | File | Purpose |
 |---|---|
 | `src/store/db.ts` | `openDb`, `migrate` (user_version-driven) |
-| `src/store/schema.ts` | `MIGRATIONS` (append-only), FTS triggers |
+| `src/store/schema.ts` | `MIGRATIONS` (append-only), FTS triggers; migration 2 adds `messages_chat_ts_seq` |
 | `src/store/types.ts` | `ChatRow`, `ChatUpsert`, `UnreadSignal`, `NewMessage`, `MessageRow`, `MessageKeyRef` |
 | `src/store/chats-repo.ts` | `ChatsRepo` |
 | `src/store/messages-repo.ts` | `MessagesRepo` |
@@ -39,7 +39,8 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 - `ChatsRepo.mergeInto` (`chats-repo.ts:148`): see merge invariant.
 - `MessagesRepo.insertMany` (`messages-repo.ts:44`): `INSERT OR IGNORE`, one transaction, moves `chats.last_msg_*` forward with SQL (no ChatsRepo dependency).
 - `MessagesRepo.softDelete` (`messages-repo.ts:72`): sets `deleted_at`, nulls `text` (FTS trigger drops it from the index).
-- `MessagesRepo.search` (`messages-repo.ts:84`): tokens are quoted (`toFtsQuery`, `messages-repo.ts:32`) so FTS syntax in the query is literal.
+- `MessagesRepo.history` (`messages-repo.ts:86`): newest first by `(ts, seq)`, keyset `beforeSeq` cursor.
+- `MessagesRepo.search` (`messages-repo.ts:106`): tokens are quoted (`toFtsQuery`, `messages-repo.ts:32`) so FTS syntax in the query is literal.
 - `AliasesRepo.repoint` (`aliases-repo.ts:18`): moves aliases of the old canonical and also records old canonical → new.
 
 ## Dependencies
@@ -53,9 +54,9 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 - **Pending query** (`pending-query.ts:14`) is one SQL statement mirroring `pendingReason`, no JS filtering; order is marked_unread, then watch `full`, then `last_msg_ts` desc (nulls last, then id). `lastIncoming` is one extra query per item (newest `from_me = 0`, non-deleted, by `ts` then `seq`), served by `messages_chat_from_me_ts`.
 - `chats.category` defaults to `'general'` (`schema.ts`, migration 0); only `setCategory` changes it.
 - `last_msg_ts` is forward-only (`ts >= current`), so backfill can't regress it.
-- `latestKey` orders by `ts`, `history` by `seq` (backfilled rows get later seqs).
+- **Newest means `(ts, seq)`, never `seq` alone.** History sync delivers the newest chunk first and later FULL chunks carry older messages with higher seqs, so `history`, `outgoing`, `search`, `latestKey` and the pending `lastIncoming` all order by `ts DESC, seq DESC` (index `messages_chat_ts_seq`, migration 2). `history`'s `beforeSeq` is a keyset cursor: it looks up that row's `ts` and returns rows strictly before `(ts, seq)`; a seq that isn't in the chat returns `[]`.
 - `messages.text` is nullable (media, deleted). Never log it.
-- Migrations are append-only; never edit shipped migrations (0, 1).
+- Migrations are append-only; never edit shipped migrations (0, 1, 2).
 - `CleanupCriteria` is `{ inactiveDays: number; excludeFull: true }`; `CleanupItem` carries `lastMsgTs`, `myLastMsgTs`, `unreadCount` for the review list. Plans stored by older code would lack those fields (none shipped).
 
 ## Testing

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { migrate, openDb } from './db.js';
+import { MIGRATIONS } from './schema.js';
 
 describe('openDb', () => {
   it('creates every table and sets user_version', () => {
@@ -11,13 +12,15 @@ describe('openDb', () => {
     expect(tables).toEqual(
       expect.arrayContaining(['audit_log', 'chats', 'cleanup_plans', 'contacts', 'jid_aliases', 'messages', 'messages_fts', 'tone_profiles', 'chat_notes']),
     );
-    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => (r as { name: string }).name);
+    expect(indexes).toContain('messages_chat_ts_seq');
   });
 
   it('migrate is idempotent', () => {
     const db = openDb(':memory:');
     expect(() => migrate(db)).not.toThrow();
-    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
   });
 
   it('keeps the FTS index in sync on insert, update and delete', () => {

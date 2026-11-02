@@ -57,7 +57,7 @@ export function registerReadTools(server: McpServer, d: ToolDeps): void {
   server.registerTool(
     'read_history',
     {
-      description: 'Messages in a chat from the local mirror, newest first. Paginate backwards with before_seq (the smallest seq you already have). Does not mark anything read.',
+      description: 'Messages in a chat from the local mirror, newest first. Paginate backwards with before_seq = the seq of the last (oldest) message of the previous page. Does not mark anything read.',
       inputSchema: {
         chat_id: chatId,
         limit: z.number().int().min(1).max(100).default(50),
