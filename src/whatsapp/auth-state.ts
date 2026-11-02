@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -40,16 +41,27 @@ export async function useEncryptedAuthState(
     }
   }
 
-  async function write(name: string, data: Buffer): Promise<void> {
-    const target = path.join(dir, name);
-    // Write-then-rename so a crash mid-write can't leave a truncated, undecryptable file.
-    const tmp = `${target}.${process.pid}.tmp`;
-    await writeFile(tmp, crypto.encrypt(data), { mode: 0o600 });
-    await rename(tmp, target);
+  // Baileys fires creds.update/keys.set in bursts, so writes to the same file are
+  // chained: the last-issued write wins and temp files never collide.
+  const queues = new Map<string, Promise<void>>();
+  function enqueue(name: string, op: () => Promise<void>): Promise<void> {
+    const run = (queues.get(name) ?? Promise.resolve()).catch(() => undefined).then(op);
+    queues.set(name, run);
+    return run;
   }
 
-  async function remove(name: string): Promise<void> {
-    await rm(path.join(dir, name), { force: true });
+  function write(name: string, data: Buffer): Promise<void> {
+    return enqueue(name, async () => {
+      const target = path.join(dir, name);
+      // Write-then-rename so a crash mid-write can't leave a truncated, undecryptable file.
+      const tmp = `${target}.${randomBytes(6).toString('hex')}.tmp`;
+      await writeFile(tmp, crypto.encrypt(data), { mode: 0o600 });
+      await rename(tmp, target);
+    });
+  }
+
+  function remove(name: string): Promise<void> {
+    return enqueue(name, () => rm(path.join(dir, name), { force: true }));
   }
 
   const credsBuf = await read(CREDS_KEY);

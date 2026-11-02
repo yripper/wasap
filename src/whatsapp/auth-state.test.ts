@@ -60,4 +60,16 @@ describe('useEncryptedAuthState', () => {
     await a.clear();
     expect(await readdir(dir)).toEqual([]);
   });
+
+  it('serializes overlapping writes to the same key without leaving temp files', async () => {
+    const a = await useEncryptedAuthState(dir, crypto1);
+    await Promise.all(Array.from({ length: 20 }, () => a.saveCreds()));
+    const writes = Array.from({ length: 20 }, (_, i) => a.state.keys.set({ session: { s: new Uint8Array([i]) } }));
+    await expect(Promise.all(writes)).resolves.toBeDefined();
+    const got = await a.state.keys.get('session', ['s']);
+    expect(Array.from(got['s'] ?? [])).toEqual([19]);
+    expect((await readdir(dir)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+    const b = await useEncryptedAuthState(dir, crypto1);
+    expect(b.state.creds.registrationId).toBe(a.state.creds.registrationId);
+  });
 });
