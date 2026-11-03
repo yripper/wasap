@@ -13,6 +13,12 @@ export class ContactsRepo {
     return r?.name ?? null;
   }
 
+  /// For weaker names (a sender's profile name): never replaces one already stored.
+  addIfMissing(contacts: { jid: string; name: string }[]): void {
+    const stmt = this.db.prepare('INSERT OR IGNORE INTO contacts (jid, name) VALUES (?, ?)');
+    this.db.transaction(() => contacts.forEach((c) => stmt.run(c.jid, c.name)))();
+  }
+
   /// Carries a name across an alias merge without overwriting one the target already has.
   copyIfMissing(from: string, to: string): void {
     if (from === to) return;

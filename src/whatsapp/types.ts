@@ -13,7 +13,8 @@ export interface WaChat {
 }
 
 /// `chatId` is exactly what Baileys gave us (possibly an @lid), before alias resolution.
-export type WaMessage = Omit<NewMessage, 'sentViaWasap'> & { senderAltJid: string | null };
+/** `pushName` is the sender's own WhatsApp profile name, only on incoming messages that carry one. */
+export type WaMessage = Omit<NewMessage, 'sentViaWasap'> & { senderAltJid: string | null; pushName?: string };
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'logged_out' | 'gave_up';
 

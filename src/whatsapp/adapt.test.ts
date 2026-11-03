@@ -52,6 +52,12 @@ describe('toWaEvents', () => {
       ],
     });
   });
+  it('carries the sender profile name on incoming messages only', () => {
+    const name = (m: WaEvent | undefined): unknown => (m?.kind === 'messages' ? m.messages[0]?.pushName : 'none');
+    expect(name(toWaEvents(waMessage({ pushName: ' Alpha ' }))[0])).toBe('Alpha');
+    expect(name(toWaEvents(waMessage({ pushName: 'Me', fromMe: true }))[0])).toBeUndefined();
+    expect(name(toWaEvents(waMessage({ pushName: '  ' }))[0])).toBeUndefined();
+  });
   it('keeps the lid chat id and exposes the alt jid', () => {
     const [e] = toWaEvents(waMessage({ chat: LID_JID, remoteJidAlt: DM_JID }));
     expect(e).toMatchObject({ kind: 'messages', messages: [{ chatId: LID_JID, senderJid: LID_JID, senderAltJid: DM_JID }] });

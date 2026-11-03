@@ -177,6 +177,16 @@ describe('Sink', () => {
     expect(c.name(PN)).toBe('Someone');
   });
 
+  it('names a sender from its profile name, under every form, without overriding a saved contact', () => {
+    gw.emit({ kind: 'aliases', pairs: [{ lid: LID, pn: PN }] });
+    gw.emit({ kind: 'messages', messages: [wm(LID, 'a', 1, { senderJid: LID, pushName: 'Profile' })] });
+    const c = new ContactsRepo(db);
+    expect([c.name(LID), c.name(PN)]).toEqual(['Profile', 'Profile']);
+    gw.emit({ kind: 'contacts', contacts: [{ jid: PN, name: 'Saved' }] });
+    gw.emit({ kind: 'messages', messages: [wm(PN, 'b', 2, { senderJid: PN, pushName: 'Profile 2' })] });
+    expect(c.name(PN)).toBe('Saved');
+  });
+
   it('tracks connection state and last event time', () => {
     expect(sink.connection()).toBe('connecting');
     expect(sink.lastEventAt()).toBeNull();

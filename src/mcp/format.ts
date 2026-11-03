@@ -63,11 +63,17 @@ function formatMuted(until: number | null, nowSec: number): 'forever' | string |
   return until > nowSec ? iso(until) : null;
 }
 
+/// What WhatsApp itself shows for a nameless DM: the number. @lid ids carry no number.
+function phoneOf(c: ChatRow): string | null {
+  const m = c.kind === 'dm' ? /^(\d+)(?::\d+)?@s\.whatsapp\.net$/.exec(c.id) : null;
+  return m ? `+${m[1]}` : null;
+}
+
 export function formatChat(c: ChatRow, nowSec: number): ChatView {
   return {
     id: c.id,
     kind: c.kind,
-    title: c.title ?? c.contactName,
+    title: c.title ?? c.contactName ?? phoneOf(c),
     watch_level: c.watchLevel,
     category: c.category,
     unread: c.unreadCount,

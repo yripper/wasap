@@ -28,7 +28,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 ## Public surface
 
 - `WhatsAppGateway` (`types.ts:29`): `onEvent`, `sendText`, `markRead`, `setArchived`, `setMuted`, `leaveGroup`, `groupTitle`, `state`, `stop` (`types.ts:39`, daemon shutdown). Every `chatId` argument is the chat's raw WhatsApp JID (`ChatRow.waJid`, see actions.md), and `MessageKeyRef.senderJid` is the raw sender JID: the gateway forwards both verbatim into stanzas and app-state patches.
-- `WaMessage` (`types.ts:16`) is `NewMessage` minus `sentViaWasap` plus `senderAltJid`; `chatId` is as Baileys gave it (may be `@lid`).
+- `WaMessage` (`types.ts:16`) is `NewMessage` minus `sentViaWasap` plus `senderAltJid` and an optional `pushName` (sender's profile name, incoming only, trimmed, omitted when empty); `chatId` is as Baileys gave it (may be `@lid`).
 - `MessageKeyRef` is re-exported from `src/store/types.ts`.
 - `BaileysGateway.start({ authDir, crypto, getMessageText, logger })` (`gateway.ts:95`) and `stop()` (`gateway.ts:108`). `start` throws `AUTH_REQUIRED` with `NOT_LINKED` (`gateway.ts:53`) when creds have no `me`, and with `UNREADABLE_SESSION` (`gateway.ts:54`) plus `describeError` when the auth state can't be decrypted.
 - `runLogin({ authDir, crypto, print })` (`login.ts:24`) resolves `{ meJid }` (normalized, no device suffix).
@@ -44,7 +44,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 - `mediaKind` `adapt.ts:25`.
 - `toWaEvents` `adapt.ts:81`: one `messages` event; `protocolMessage` REVOKE/MESSAGE_EDIT become `revoke`/`edit` keyed by `protocolMessage.key.id` with the outer `remoteJid`; reactions, poll votes (`pollUpdateMessage`), other protocol messages, content made only of `NOT_CONTENT` keys (`adapt.ts:65`: sender-key distribution, `messageContextInfo`, reactions, poll/event votes), `status@broadcast` and newsletters give `[]`. Anything else with no text and no known media kind (polls, `ptvMessage`, events, templates, interactive...) is stored with `mediaKind: 'other'`, so the newest-message anchors (pending `latest_incoming`, mark-read/archive keys) stay correct.
 - `toWaChat` `adapt.ts:120`: see unread gotcha.
-- `toContactPairs` `adapt.ts:152`: names plus `lid`/`pn` alias pairs from Baileys contacts.
+- `toContactPairs` `adapt.ts:154`: names plus `lid`/`pn` alias pairs from Baileys contacts.
 - `useEncryptedAuthState` `auth-state.ts:32`: files `0600` in a `0700` dir, key files named `<type>.<base64url(id)>` (`keyName`, `auth-state.ts:22`: injective, so ids like `a+b` and `a/b` never share a file; only `[A-Za-z0-9._-]`), write-then-rename; `clear()` deletes every file in the dir but not the dir.
 - `loadOrCreateAuthKey` `session-crypto.ts:37`: reads `SECRET_ACCOUNTS.authKey` (64 hex), creates one if missing.
 - `nextDelayMs` `backoff.ts:7`: 2s base, x2, 300s cap, +-20% jitter via injectable `random`; from attempt 10 (`maxAttempts`) it stays at the cap forever (never `null`).

@@ -57,6 +57,7 @@ All `chat_id` params are JID strings. `category` is lowercase, <= 32 chars, `/^[
 
 ## Gotchas & invariants
 
+- Chat `title` in every view is `title ?? contactName ?? phone` (`formatChat`, `format.ts:72`; `phoneOf`, `format.ts:67`). WhatsApp only names groups, so DMs use the saved contact or profile name, then `+<digits>` from a `@s.whatsapp.net` id (device suffix dropped). `@lid` DMs with no name stay `null`, since a lid has no number.
 - Check order in `handle`: Host (403), path `/mcp` (404), bearer token (401), POST only (405).
 - Stateless: a fresh server and transport per request so no state leaks between clients.
 - Handler errors are logged via `describeError`, never tokens or bodies.
