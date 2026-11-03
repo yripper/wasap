@@ -88,12 +88,28 @@ describe('ChatsRepo', () => {
       expect(repo.get(DM)).toMatchObject({ unreadCount: 4, markedUnread: true });
     });
 
-    it('absolute sets count and flag; negative becomes 0 + marked', () => {
+    it('absolute sets count and flag; negative becomes marked', () => {
       seed(0, false);
-      repo.applyUnread(DM, { kind: 'absolute', count: 4, markedUnread: true });
-      expect(repo.get(DM)).toMatchObject({ unreadCount: 4, markedUnread: true });
+      repo.applyUnread(DM, { kind: 'absolute', count: 4, markedUnread: false });
+      expect(repo.get(DM)).toMatchObject({ unreadCount: 4, markedUnread: false });
       repo.applyUnread(DM, { kind: 'absolute', count: -1, markedUnread: false });
-      expect(repo.get(DM)).toMatchObject({ unreadCount: 0, markedUnread: true });
+      expect(repo.get(DM)).toMatchObject({ unreadCount: 4, markedUnread: true });
+    });
+
+    it('absolute never lowers: a later history chunk without a count keeps the earlier one', () => {
+      seed(0, false);
+      repo.applyUnread(DM, { kind: 'absolute', count: 7, markedUnread: true });
+      repo.applyUnread(DM, { kind: 'absolute', count: 0, markedUnread: false });
+      expect(repo.get(DM)).toMatchObject({ unreadCount: 7, markedUnread: true });
+      repo.applyUnread(DM, { kind: 'absolute', count: 3, markedUnread: false });
+      expect(repo.get(DM)?.unreadCount).toBe(7);
+    });
+
+    it('live 0 still clears what history set', () => {
+      seed(0, false);
+      repo.applyUnread(DM, { kind: 'absolute', count: 7, markedUnread: true });
+      repo.applyUnread(DM, { kind: 'live', value: 0 });
+      expect(repo.get(DM)).toMatchObject({ unreadCount: 0, markedUnread: false });
     });
 
     it('upsert applies a supplied unread signal', () => {
@@ -153,7 +169,8 @@ describe('ChatsRepo', () => {
         category: 'waiting',
         snoozeUntil: 777,
         createdAt: 100,
-        unreadCount: 5,
+        // Both aliases carry the same WhatsApp snapshot, so summing would double-count.
+        unreadCount: 3,
         markedUnread: true,
         lastMsgTs: 30,
         lastMsgFromMe: true,
