@@ -75,10 +75,13 @@ export class ChatsRepo {
   }
 
   /// Stored count is never negative; WhatsApp's -1 becomes marked_unread.
+  /// Absolute (history) signals only raise: the phone sends history in several chunks and
+  /// repeats chats in later ones, where protobuf decodes the missing count as 0. Overwriting
+  /// would wipe the real count, so clearing is left to live read updates.
   applyUnread(id: string, s: UnreadSignal): void {
     if (s.kind === 'absolute') {
       this.db
-        .prepare('UPDATE chats SET unread_count = MAX(?, 0), marked_unread = ? WHERE id = ?')
+        .prepare('UPDATE chats SET unread_count = MAX(unread_count, ?, 0), marked_unread = MAX(marked_unread, ?) WHERE id = ?')
         .run(s.count, bit(s.markedUnread || s.count < 0), id);
       return;
     }
@@ -199,7 +202,8 @@ export class ChatsRepo {
           category: local.category,
           snooze: local.snoozeUntil,
           created: Math.min(from.createdAt, into.createdAt),
-          unread: from.unreadCount + into.unreadCount,
+          // Both aliases usually carry the same WhatsApp snapshot; summing would double-count.
+          unread: Math.max(from.unreadCount, into.unreadCount),
           marked: bit(from.markedUnread || into.markedUnread),
           title: into.title ?? from.title,
           lastTs: newer.lastMsgTs,
