@@ -40,8 +40,10 @@ export function createSocket(d: SocketDeps): WASocket {
     markOnlineOnConnect: false,
     syncFullHistory: true,
     shouldSyncHistoryMessage: () => true,
-    // A desktop browser string makes the phone send the full history, not ~3 months.
-    browser: Browsers.macOS('Desktop'),
+    // Baileys' default. WhatsApp closes the socket with 428 before sending a QR for any
+    // 'Desktop' browser string (checked 2026-11-03 on rc14); full history is still
+    // requested through syncFullHistory.
+    browser: Browsers.macOS('Chrome'),
     // Needed for retry receipts: the peer asks us to re-encrypt a message we sent.
     getMessage: async (key: WAMessageKey) => {
       const text = key.remoteJid && key.id ? d.getMessageText(key.remoteJid, key.id) : null;
