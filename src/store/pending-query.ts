@@ -1,5 +1,5 @@
 import type { PendingReason } from '../domain/pending.js';
-import { rowToChat } from './chats-repo.js';
+import { CHAT_COLUMNS, rowToChat } from './chats-repo.js';
 import type { Db } from './db.js';
 import { rowToMessage } from './messages-repo.js';
 import type { ChatRow, MessageRow } from './types.js';
@@ -12,7 +12,7 @@ export interface PendingItem {
 
 // SQL mirror of pendingReason (src/domain/pending.ts); the test checks they agree.
 const PENDING_SQL = `
-  SELECT *, CASE WHEN marked_unread = 1 THEN 'marked_unread' ELSE 'unread' END AS reason
+  SELECT ${CHAT_COLUMNS}, CASE WHEN marked_unread = 1 THEN 'marked_unread' ELSE 'unread' END AS reason
   FROM chats
   WHERE archived = 0 AND watch_level != 'muted'
     AND (snooze_until IS NULL OR snooze_until <= @now)

@@ -9,6 +9,7 @@ function chat(over: Partial<ChatRow> = {}): ChatRow {
     id: '999-1@g.us',
     kind: 'group',
     title: null,
+    contactName: null,
     waJid: '999-1@g.us',
     unreadCount: 0,
     markedUnread: false,

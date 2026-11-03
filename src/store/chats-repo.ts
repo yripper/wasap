@@ -13,11 +13,19 @@ export interface ChatFilter {
   offset: number;
 }
 
+/// Contact name for the row in `chats`, under its id first, then any alias. Kept out of
+/// `title` so merges and upserts never freeze a contact's name into the chat.
+const CONTACT_NAME = `(SELECT k.name FROM contacts k
+  WHERE k.jid = chats.id OR k.jid IN (SELECT alias FROM jid_aliases WHERE canonical = chats.id)
+  ORDER BY k.jid = chats.id DESC, k.jid LIMIT 1)`;
+export const CHAT_COLUMNS = `chats.*, ${CONTACT_NAME} AS contact_name`;
+
 export function rowToChat(r: Record<string, unknown>): ChatRow {
   return {
     id: String(r.id),
     kind: r.kind as ChatKind,
     title: (r.title as string | null) ?? null,
+    contactName: (r.contact_name as string | null | undefined) ?? null,
     waJid: String(r.wa_jid ?? r.id),
     unreadCount: Number(r.unread_count),
     markedUnread: r.marked_unread === 1,
@@ -98,7 +106,7 @@ export class ChatsRepo {
   }
 
   get(id: string): ChatRow | null {
-    const r = this.db.prepare('SELECT * FROM chats WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    const r = this.db.prepare(`SELECT ${CHAT_COLUMNS} FROM chats WHERE id = ?`).get(id) as Record<string, unknown> | undefined;
     return r ? rowToChat(r) : null;
   }
 
@@ -121,10 +129,10 @@ export class ChatsRepo {
       params.category = f.category;
     }
     if (f.query) {
-      where.push("(title LIKE @q ESCAPE '\\' OR id LIKE @q ESCAPE '\\')");
+      where.push(`(title LIKE @q ESCAPE '\\' OR id LIKE @q ESCAPE '\\' OR ${CONTACT_NAME} LIKE @q ESCAPE '\\')`);
       params.q = `%${f.query.replace(/[\\%_]/g, '\\$&')}%`;
     }
-    const sql = `SELECT * FROM chats ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    const sql = `SELECT ${CHAT_COLUMNS} FROM chats ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
                  ORDER BY last_msg_ts IS NULL, last_msg_ts DESC, id LIMIT @limit OFFSET @offset`;
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map(rowToChat);
   }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { pendingReason } from '../domain/pending.js';
 import { ChatsRepo } from './chats-repo.js';
+import { ContactsRepo } from './contacts-repo.js';
 import { openDb, type Db } from './db.js';
 import { MessagesRepo } from './messages-repo.js';
 import { listPending } from './pending-query.js';
@@ -75,5 +76,11 @@ describe('listPending', () => {
     say('111@s.whatsapp.net', 'a', 1);
     say('112@s.whatsapp.net', 'b', 2);
     expect(listPending(db, NOW, 1).map((i) => i.chat.id)).toEqual(['112@s.whatsapp.net']);
+  });
+
+  it('carries the contact name for untitled DMs', () => {
+    add('111@s.whatsapp.net', 'dm', 1);
+    new ContactsRepo(db).upsertMany([{ jid: '111@s.whatsapp.net', name: 'Alpha' }]);
+    expect(listPending(db, NOW, 5)[0]?.chat.contactName).toBe('Alpha');
   });
 });

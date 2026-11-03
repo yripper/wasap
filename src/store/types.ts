@@ -6,6 +6,8 @@ export interface ChatRow {
   id: string;
   kind: ChatKind;
   title: string | null;
+  /** Saved contact name (under the id or any alias); most DMs have no title of their own. Read-only, never stored on the chat. */
+  contactName: string | null;
   /** The JID WhatsApp uses for this chat (may be the @lid twin of `id`); every gateway call uses it. */
   waJid: string;
   unreadCount: number;
