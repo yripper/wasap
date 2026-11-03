@@ -12,7 +12,8 @@ function capture(level = 'info'): { lines: () => Record<string, unknown>[]; pare
       cb();
     },
   });
-  const parent = pino({ level }, dest);
+  // No time/pid/hostname: they're random digits that can contain the fake ids the tests assert are absent.
+  const parent = pino({ level, timestamp: false, base: undefined }, dest);
   return { parent, lines: () => chunks.join('').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) };
 }
 
