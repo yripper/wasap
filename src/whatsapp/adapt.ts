@@ -100,6 +100,7 @@ export function toWaEvents(m: WAMessage): WaEvent[] {
   if (content.reactionMessage || content.pollUpdateMessage || !hasContent(content)) return [];
 
   const text = extractText(content);
+  const pushName = m.key.fromMe ? '' : (m.pushName ?? '').trim();
   const media = mediaKind(content) ?? (text === null ? 'other' : null);
 
   const message: WaMessage = {
@@ -111,6 +112,7 @@ export function toWaEvents(m: WAMessage): WaEvent[] {
     text,
     mediaKind: media,
     quotedId: quotedIdOf(content),
+    ...(pushName ? { pushName } : {}),
   };
   return [{ kind: 'messages', messages: [message] }];
 }

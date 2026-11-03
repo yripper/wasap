@@ -13,6 +13,7 @@ export function waMessage(opts: {
   ts?: number;
   remoteJidAlt?: string;
   participantAlt?: string;
+  pushName?: string;
 }): WAMessage {
   return {
     key: {
@@ -25,5 +26,6 @@ export function waMessage(opts: {
     },
     message: opts.message === undefined ? { conversation: 'hello' } : opts.message,
     messageTimestamp: opts.ts ?? 1700000000,
+    ...(opts.pushName === undefined ? {} : { pushName: opts.pushName }),
   };
 }

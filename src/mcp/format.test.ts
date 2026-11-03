@@ -40,6 +40,14 @@ describe('formatChat', () => {
     expect(formatChat(chat({ title: 'Own', contactName: 'Alpha' }), 100).title).toBe('Own');
   });
 
+  it('falls back to the phone number for a nameless DM, never for a lid or group', () => {
+    const dm = (id: string): ChatRow => chat({ id, kind: 'dm', title: null, waJid: id });
+    expect(formatChat(dm('5550001@s.whatsapp.net'), 100).title).toBe('+5550001');
+    expect(formatChat(dm('5550001:3@s.whatsapp.net'), 100).title).toBe('+5550001');
+    expect(formatChat(dm('222@lid'), 100).title).toBeNull();
+    expect(formatChat(chat({ title: null }), 100).title).toBeNull();
+  });
+
   it('formats a -1 mute as forever, never a 1969 date', () => {
     expect(formatChat(chat({ waMutedUntil: -1 }), 100).muted).toBe('forever');
   });

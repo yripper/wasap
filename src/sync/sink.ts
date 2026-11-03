@@ -114,6 +114,7 @@ export class Sink {
   private applyMessages(batch: WaMessage[]): void {
     const { chats, aliases, messages, now } = this.d;
     for (const m of batch) this.linkSender(m);
+    this.rememberProfileNames(batch);
     const rows = batch.map((m) => ({
       chatId: aliases.resolve(m.chatId),
       waId: m.waId,
@@ -130,6 +131,19 @@ export class Sink {
     // Messages are not chat-level events: the raw chat JID only seeds wa_jid for a brand-new chat.
     for (const m of batch) chats.upsert({ id: aliases.resolve(m.chatId), kind: chatKind(m.chatId), firstSeenAs: m.chatId }, now());
     messages.insertMany(rows);
+  }
+
+  /// People outside the address book only have the profile name they send with each
+  /// message; it fills the gap but never overrides a saved contact name.
+  private rememberProfileNames(batch: WaMessage[]): void {
+    const { aliases, contacts } = this.d;
+    const named = batch.flatMap((m) => {
+      const name = m.pushName;
+      if (!name || m.senderJid === null) return [];
+      const forms = new Set([m.senderJid, aliases.resolve(m.senderJid), ...(m.senderAltJid ? [m.senderAltJid] : [])]);
+      return [...forms].map((jid) => ({ jid, name }));
+    });
+    if (named.length > 0) contacts.addIfMissing(named);
   }
 
   /// A sender's two forms (exactly one @lid and one phone JID) are an alias pair.
