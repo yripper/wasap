@@ -9,7 +9,7 @@ const msg = (over: Partial<MessageRow>): MessageRow => ({
 
 const chat = (over: Partial<ChatRow>): ChatRow => ({
   id: '999-1@g.us', kind: 'group', title: 'Test', waJid: '999-1@g.us', unreadCount: 0, markedUnread: false, archived: false, waMutedUntil: null,
-  watchLevel: 'normal', category: 'general', snoozeUntil: null, lastMsgTs: null, lastMsgFromMe: null, createdAt: 0, ...over,
+  watchLevel: 'normal', category: 'general', snoozeUntil: null, lastMsgTs: null, lastMsgFromMe: null, createdAt: 0, contactName: null, ...over,
 });
 
 describe('formatMessage', () => {
@@ -35,6 +35,11 @@ describe('formatMessage', () => {
 });
 
 describe('formatChat', () => {
+  it('uses the contact name when the chat has no title', () => {
+    expect(formatChat(chat({ title: null, contactName: 'Alpha' }), 100).title).toBe('Alpha');
+    expect(formatChat(chat({ title: 'Own', contactName: 'Alpha' }), 100).title).toBe('Own');
+  });
+
   it('formats a -1 mute as forever, never a 1969 date', () => {
     expect(formatChat(chat({ waMutedUntil: -1 }), 100).muted).toBe('forever');
   });

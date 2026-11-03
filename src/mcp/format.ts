@@ -67,7 +67,7 @@ export function formatChat(c: ChatRow, nowSec: number): ChatView {
   return {
     id: c.id,
     kind: c.kind,
-    title: c.title,
+    title: c.title ?? c.contactName,
     watch_level: c.watchLevel,
     category: c.category,
     unread: c.unreadCount,

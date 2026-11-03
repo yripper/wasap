@@ -27,16 +27,16 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 ## Public surface
 
 - `openDb(file)` (`db.ts:6`), `migrate(db)` (`db.ts:14`).
-- `new ChatsRepo(db, defaultWatch: (kind) => WatchLevel)` (`chats-repo.ts:37`): `upsert`, `applyUnread`, `get`, `list` (`ChatFilter.excludeWatch` drops one watch level unless `watchLevel` is set), `setWatchLevel`, `setCategory`, `setSnooze`, `setArchived`, `setWaMuted`, `touchLastMessage`, `mergeInto`.
+- `new ChatsRepo(db, defaultWatch: (kind) => WatchLevel)` (`chats-repo.ts:46`): `upsert`, `applyUnread`, `get`, `list` (`ChatFilter.excludeWatch` drops one watch level unless `watchLevel` is set), `setWatchLevel`, `setCategory`, `setSnooze`, `setArchived`, `setWaMuted`, `touchLastMessage`, `mergeInto`.
 - `new MessagesRepo(db)` (`messages-repo.ts:49`): `insertMany`, `repointSender`, `editText`, `softDelete`, `history`, `search`, `latestKey`, `outgoing` (`textOnly` option filters usable voice samples in SQL: not deleted, non-empty text, `sent_via_wasap = 0`), `countOutgoingSince`, `getText`.
-- `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:28`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:16`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
+- `listPending(db, nowSec, limit): PendingItem[]` (`pending-query.ts:28`): chats waiting on me, each with `reason` and `lastIncoming`. `rowToChat` (`chats-repo.ts:23`) and `rowToMessage` (`messages-repo.ts:6`) are exported for it.
 - `new AliasesRepo(db)`, `new ContactsRepo(db)` (`upsertMany`, `name`, `copyIfMissing(from, to)`: insert-or-ignore name copy for alias merges), `new AuditRepo(db)`, `new CleanupPlansRepo(db)`.
 
 ## Key methods
 
-- `ChatsRepo.upsert` (`chats-repo.ts:45`): insert sets `watch_level` from `defaultWatch(kind)`; the conflict branch never touches `watch_level`, `category`, `snooze_until`. `title`/`archived`/`waMutedUntil` only change when supplied (`undefined` = keep; `waMutedUntil: null` clears).
-- `ChatsRepo.applyUnread` (`chats-repo.ts:78`): see unread invariant.
-- `ChatsRepo.mergeInto` (`chats-repo.ts:167`): see merge invariant.
+- `ChatsRepo.upsert` (`chats-repo.ts:53`): insert sets `watch_level` from `defaultWatch(kind)`; the conflict branch never touches `watch_level`, `category`, `snooze_until`. `title`/`archived`/`waMutedUntil` only change when supplied (`undefined` = keep; `waMutedUntil: null` clears).
+- `ChatsRepo.applyUnread` (`chats-repo.ts:89`): see unread invariant.
+- `ChatsRepo.mergeInto` (`chats-repo.ts:178`): see merge invariant.
 - `MessagesRepo.insertMany` (`messages-repo.ts:54`): `INSERT OR IGNORE`, one transaction, moves `chats.last_msg_*` forward with SQL (no ChatsRepo dependency).
 - `MessagesRepo.softDelete` (`messages-repo.ts:89`): sets `deleted_at`, nulls `text` (FTS trigger drops it from the index).
 - `MessagesRepo.history` (`messages-repo.ts:96`): newest first by `(ts, seq)`, keyset `beforeSeq` cursor.
@@ -50,6 +50,7 @@ SQLite mirror of the WhatsApp account (better-sqlite3, WAL): chats, messages wit
 ## Gotchas & invariants
 
 - **Unread storage:** `unread_count` is never negative. `markedUnread` is its own column. `live` signals (chats.update): `-1` sets marked and leaves the count; positive values are increments added to `max(count, 0)` and leave marked alone; `0` zeroes the count and clears marked; `null` is a no-op. `absolute` signals (history sync, chats.upsert) only raise: count = `max(stored, count, 0)`, marked = stored OR given flag OR `count < 0`. History arrives in several chunks that repeat chats, and protobuf decodes a missing count as 0, so overwriting wiped real counts (seen 2026-11-03: about 110 unread chats on the phone, 1 in wasap). Only live updates clear unread.
+- **Contact name (`chats-repo.ts:18`):** most DMs have no `title` (WhatsApp only names groups), so `get`, `list` and `listPending` select `CHAT_COLUMNS` (`chats-repo.ts:21`), which adds `contact_name` from `contacts` under the chat id first, then any alias. `list`'s `query` matches it too, and the MCP view shows `title ?? contactName` (`src/mcp/format.ts`). It's never written to `chats.title`, so merges and upserts don't freeze a contact's name into the chat. Before this, 549 of 737 real DMs were nameless and unsearchable.
 - **Merge rule (`mergeInto(from, into)`):** messages move with `UPDATE OR IGNORE` on `(chat_id, wa_id)`, leftovers (duplicates) are deleted. The surviving row is `into`, but `watch_level`, `category`, `snooze_until` come from whichever row has the older `created_at` (tie: `into`), and `created_at` becomes the older one. Unread takes the max (both aliases carry the same snapshot, so a sum double-counts), `marked_unread` ORed, `last_msg_*` taken from the newer row. If `into` does not exist, `from` is renamed. `chat_notes` move to `into` in the same transaction when `into` has none; otherwise the loser's notes are deleted (`moveNotes`). FTS stays consistent because only `chat_id` changes on moved rows and deleted duplicates fire the delete trigger.
 - **Pending query** (`pending-query.ts:14`) is one SQL statement mirroring `pendingReason`, no JS filtering; order is marked_unread, then watch `full`, then `last_msg_ts` desc (nulls last, then id). `lastIncoming` is one extra query per item (newest `from_me = 0`, non-deleted, by `ts` then `seq`), served by `messages_chat_from_me_ts`.
 - `chats.category` defaults to `'general'` (`schema.ts`, migration 0); only `setCategory` changes it.

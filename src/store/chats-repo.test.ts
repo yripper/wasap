@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { AliasesRepo } from './aliases-repo.js';
 import { AuditRepo } from './audit-repo.js';
 import { ChatsRepo } from './chats-repo.js';
 import { CleanupPlansRepo } from './cleanup-plans-repo.js';
+import { ContactsRepo } from './contacts-repo.js';
 import { openDb, type Db } from './db.js';
 import { MessagesRepo } from './messages-repo.js';
 import type { NewMessage } from './types.js';
@@ -115,6 +117,37 @@ describe('ChatsRepo', () => {
     it('upsert applies a supplied unread signal', () => {
       repo.upsert({ id: DM, kind: 'dm', unread: { kind: 'absolute', count: 3, markedUnread: false } }, 1);
       expect(repo.get(DM)?.unreadCount).toBe(3);
+    });
+  });
+
+  describe('contact name', () => {
+    it('comes from the contact saved under the chat id', () => {
+      repo.upsert({ id: DM, kind: 'dm' }, 1);
+      new ContactsRepo(db).upsertMany([{ jid: DM, name: 'Alpha Person' }]);
+      expect(repo.get(DM)).toMatchObject({ title: null, contactName: 'Alpha Person' });
+    });
+
+    it('falls back to a contact saved under an alias, preferring the chat id', () => {
+      repo.upsert({ id: DM, kind: 'dm' }, 1);
+      new AliasesRepo(db).add(LID, DM);
+      const contacts = new ContactsRepo(db);
+      contacts.upsertMany([{ jid: LID, name: 'Via Alias' }]);
+      expect(repo.get(DM)?.contactName).toBe('Via Alias');
+      contacts.upsertMany([{ jid: DM, name: 'Direct' }]);
+      expect(repo.get(DM)?.contactName).toBe('Direct');
+    });
+
+    it('is null without a contact', () => {
+      repo.upsert({ id: DM, kind: 'dm' }, 1);
+      expect(repo.get(DM)?.contactName).toBeNull();
+    });
+
+    it('list returns it and matches it in a search', () => {
+      repo.upsert({ id: DM, kind: 'dm' }, 1);
+      repo.upsert({ id: GROUP, kind: 'group', title: 'Beta' }, 1);
+      new AliasesRepo(db).add(LID, DM);
+      new ContactsRepo(db).upsertMany([{ jid: LID, name: 'Gamma_Name' }]);
+      expect(repo.list({ query: 'gamma_', limit: 10, offset: 0 }).map((c) => [c.id, c.contactName])).toEqual([[DM, 'Gamma_Name']]);
     });
   });
 
