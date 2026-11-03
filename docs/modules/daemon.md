@@ -25,7 +25,7 @@ Process-level plumbing and wiring: single-instance lock, logger, background loop
 ## Public surface
 
 - `acquireLock(path, pid?)` (`lock.ts:18`): throws `INTERNAL` ("wasap is already running … pm2 stop wasap") if a live process holds it; reclaims stale locks; `release()` only removes its own pid.
-- `createLogger()` (`logger.ts:7`): level from `WASAP_LOG_LEVEL`, redacts `text`, `token`, `authKey`, `phone`, `authorization`.
+- `createLogger(dest?)` (`logger.ts:9`): level from `WASAP_LOG_LEVEL`, redacts `text`, `token`, `authKey`, `phone`, `authorization`. `base: undefined` drops pino's default `pid` and `hostname` (a Mac's hostname usually carries the owner's name into pm2 logs). `dest` is for tests.
 - `startNonOverlappingLoop(task, intervalMs, onError, opts?)` (`loop.ts:5`): skips a tick while the previous run is in flight; returns a stop function.
 - `ensureBearerToken(secrets)` (`token.ts:6`): reads or creates a 32-byte hex token in the Keychain.
 - `connectionSnippets(port, token)` (`snippets.ts:1`): `claude mcp add` line and Claude Desktop `mcp-remote` JSON, server name `wasap`.

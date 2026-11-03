@@ -90,7 +90,16 @@ async function closeResult(err: unknown, auth: Auth): Promise<Attempt> {
     await auth.clear();
     return { kind: 'failed', error: new AppError('LOGGED_OUT', 'The previous WhatsApp link was revoked and has been cleared; run `wasap login` again') };
   }
-  return { kind: 'failed', error: new AppError('AUTH_REQUIRED', 'WhatsApp login did not complete (QR expired or connection lost); try again') };
+  return { kind: 'failed', error: new AppError('AUTH_REQUIRED', loginFailureMessage(closeReason(err))) };
+}
+
+/// The close code is the only clue to why a link failed (a 428 for a rejected browser
+/// string once looked exactly like an expired QR), so it is always shown.
+export function loginFailureMessage(r: { code: number | null; name: string }): string {
+  const lead = 'WhatsApp login did not complete:';
+  if (r.code === 408) return `${lead} the QR code expired before it was scanned (408); run \`wasap login\` again`;
+  if (r.code === null) return `${lead} the connection dropped (no status code); try again`;
+  return `${lead} WhatsApp closed the connection (${r.name}, ${r.code}); try again in a minute`;
 }
 
 export type LinkStatus = 'linked' | 'not_linked' | 'unreadable';
