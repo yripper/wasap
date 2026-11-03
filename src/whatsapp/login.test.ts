@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useEncryptedAuthState } from './auth-state.js';
-import { linkStatus, prepareLogin, runLogout, wipeAuthDir } from './login.js';
+import { linkStatus, loginFailureMessage, prepareLogin, runLogout, wipeAuthDir } from './login.js';
 import { SessionCrypto } from './session-crypto.js';
 
 let dir: string;
@@ -85,5 +85,13 @@ describe('link helpers', () => {
     await pair();
     expect(await runLogout({ authDir: dir, crypto: otherKey })).toBe('local_only');
     expect(readdirSync(dir)).toEqual([]);
+  });
+});
+
+describe('loginFailureMessage', () => {
+  it('names the real reason and code instead of a generic guess', () => {
+    expect(loginFailureMessage({ code: 408, name: 'timedOut' })).toBe('WhatsApp login did not complete: the QR code expired before it was scanned (408); run `wasap login` again');
+    expect(loginFailureMessage({ code: 428, name: 'connectionClosed' })).toBe('WhatsApp login did not complete: WhatsApp closed the connection (connectionClosed, 428); try again in a minute');
+    expect(loginFailureMessage({ code: null, name: 'unknown' })).toBe('WhatsApp login did not complete: the connection dropped (no status code); try again');
   });
 });
