@@ -8,7 +8,7 @@ import { acquireLock } from './daemon/lock.js';
 import { createLogger } from './daemon/logger.js';
 import { connectionSnippets } from './daemon/snippets.js';
 import { ensureBearerToken } from './daemon/token.js';
-import { Keychain } from './secrets/keychain.js';
+import { createSecretStore } from './secrets/store.js';
 import { BaileysGateway } from './whatsapp/gateway.js';
 import { prepareLogin, runLogin, runLogout } from './whatsapp/login.js';
 import { loadOrCreateAuthKey } from './whatsapp/session-crypto.js';
@@ -34,14 +34,14 @@ async function withLock(paths: AppPaths, fn: () => Promise<void>): Promise<void>
 async function login(force: boolean): Promise<void> {
   const paths = resolvePaths();
   await withLock(paths, async () => {
-    const keychain = new Keychain();
-    const crypto = await loadOrCreateAuthKey(keychain);
+    const secrets = createSecretStore();
+    const crypto = await loadOrCreateAuthKey(secrets);
     const prep = await prepareLogin(paths.authDir, crypto, force);
     if (prep !== 'ready') {
       stdout.write(
         prep === 'already_linked'
           ? 'Already linked. Run `wasap login --force` to replace the link, or `wasap logout` first.\n'
-          : 'The stored WhatsApp session cannot be decrypted (Keychain key changed or files corrupted). Run `wasap login --force` to delete it and link again.\n',
+          : 'The stored WhatsApp session cannot be decrypted (the key in the system secret store changed or the files are corrupted). Run `wasap login --force` to delete it and link again.\n',
       );
       process.exitCode = 1;
       return;
@@ -49,7 +49,7 @@ async function login(force: boolean): Promise<void> {
     if (force) stdout.write('Any previous session was deleted. If this computer still shows under Linked devices on your phone, remove it there.\n');
     stdout.write('Open WhatsApp on your phone > Settings > Linked devices > Link a device, and scan:\n');
     await runLogin({ authDir: paths.authDir, crypto, print: (s: string) => stdout.write(`${s}\n`) });
-    await ensureBearerToken(keychain);
+    await ensureBearerToken(secrets);
     stdout.write('Linked. Next: `pnpm build && pm2 start ecosystem.config.cjs` (later: `pm2 restart wasap`), then `wasap token`.\n');
   });
 }
@@ -58,31 +58,31 @@ async function start(): Promise<void> {
   const log = createLogger();
   const paths = resolvePaths();
   ensureHome(paths);
-  const keychain = new Keychain();
+  const secrets = createSecretStore();
   // Log-only safety net: a stray rejection must not take the daemon down, and
   // describeError never includes message text or secrets.
   process.on('unhandledRejection', (e: unknown) => log.error(`unhandled rejection: ${describeError(e)}`));
   const daemon = await startDaemon({
     paths,
     config: loadConfig(paths.config),
-    secrets: keychain,
+    secrets,
     logger: log,
     gatewayFactory: async ({ getMessageText }) =>
-      BaileysGateway.start({ authDir: paths.authDir, crypto: await loadOrCreateAuthKey(keychain), getMessageText, logger: log }),
+      BaileysGateway.start({ authDir: paths.authDir, crypto: await loadOrCreateAuthKey(secrets), getMessageText, logger: log }),
   });
   exitOnSignals(daemon, log);
 }
 
 async function token(): Promise<void> {
   const paths = resolvePaths();
-  const value = await ensureBearerToken(new Keychain());
+  const value = await ensureBearerToken(createSecretStore());
   stdout.write(`${connectionSnippets(loadConfig(paths.config).port, value)}\n`);
 }
 
 async function logout(): Promise<void> {
   const paths = resolvePaths();
   await withLock(paths, async () => {
-    const crypto = await loadOrCreateAuthKey(new Keychain());
+    const crypto = await loadOrCreateAuthKey(createSecretStore());
     const result = await runLogout({ authDir: paths.authDir, crypto });
     if (result === 'not_linked') stdout.write('Not linked; nothing to do.\n');
     if (result === 'remote') stdout.write('Logged out: this device was removed from your WhatsApp account.\n');

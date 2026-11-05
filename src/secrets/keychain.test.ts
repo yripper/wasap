@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../domain/errors.js';
-import { type CommandRunner, Keychain } from './keychain.js';
+import { type CommandRunner, Keychain, spawnRunner } from './keychain.js';
 
 class FakeRunner implements CommandRunner {
   readonly calls: { args: string[]; stdin?: string }[] = [];
@@ -64,5 +64,11 @@ describe.runIf(process.env.WASAP_KEYCHAIN_IT === '1')('Keychain (real)', () => {
     expect(await kc.get('it')).toBe('v1+/=');
     await kc.delete('it');
     expect(await kc.get('it')).toBeNull();
+  });
+});
+
+describe('spawnRunner', () => {
+  it('rejects with ENOENT when the binary does not exist', async () => {
+    await expect(spawnRunner('wasap-no-such-binary').run([])).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

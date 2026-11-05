@@ -6,7 +6,7 @@ Living docs, one per module. **Read the relevant doc before modifying a module; 
 |---|---|---|
 | [domain.md](domain.md) | `src/domain/` | Pure logic with no I/O: `AppError` and rate limiting. |
 | [mcp.md](mcp.md) | `src/mcp/` | The MCP server Claude talks to: HTTP transport with bearer auth, usage instructions, formatting and the 24 tools. |
-| [secrets.md](secrets.md) | `src/secrets/` | macOS Keychain access through the built-in `security` CLI. |
+| [secrets.md](secrets.md) | `src/secrets/` | OS secret store: macOS Keychain (`security`) or Linux keyring (`secret-tool`), picked by platform. |
 | [config.md](config.md) | `src/config/` | `~/.wasap` path layout and zod-validated config. |
 | [daemon.md](daemon.md) | `src/daemon/`, `src/cli.ts`, `ecosystem.config.cjs` | Daemon wiring (`startDaemon`), lock, logger, bearer token, connection snippets, the `wasap` CLI and the pm2 config. |
 | [store.md](store.md) | `src/store/` | SQLite schema and repos: chats, messages (FTS), JID aliases, contacts, audit, cleanup plans. |

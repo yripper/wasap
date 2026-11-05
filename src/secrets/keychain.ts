@@ -13,30 +13,37 @@ export interface CommandRunner {
 
 export const SECRET_ACCOUNTS = { bearerToken: 'bearer_token', authKey: 'auth_key' } as const;
 
-const SERVICE = 'wasap';
+export const SECRET_SERVICE = 'wasap';
 // security(1) exit status for errSecItemNotFound.
 const ITEM_NOT_FOUND = 44;
 // Values are interpolated into a `security -i` command line, so only allow
 // characters that can't start a new argument or command (base64, hex, tokens).
+// Every backend enforces it, so a value that works on Linux also works on macOS.
 const SAFE_VALUE = /^[A-Za-z0-9+/=_.:-]+$/;
 
-export const securityCli: CommandRunner = {
-  run(args: string[], stdin?: string) {
-    return new Promise((resolve, reject) => {
-      const child = spawn('/usr/bin/security', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-      let stdout = '';
-      let stderr = '';
-      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
-      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
-      child.on('error', reject);
-      child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
-      // EPIPE when security exits before reading stdin would otherwise be an
-      // uncaught 'error' event; the close/error handlers already report failure.
-      child.stdin.on('error', () => {});
-      child.stdin.end(stdin ?? '');
-    });
-  },
-};
+/// Runs `bin` without a shell. A missing binary rejects with the spawn error
+/// (`code: 'ENOENT'`), so backends can turn it into an install hint.
+export function spawnRunner(bin: string): CommandRunner {
+  return { run: (args: string[], stdin?: string) => spawnOnce(bin, args, stdin) };
+}
+
+function spawnOnce(bin: string, args: string[], stdin?: string): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    // EPIPE when the tool exits before reading stdin would otherwise be an
+    // uncaught 'error' event; the close/error handlers already report failure.
+    child.stdin.on('error', () => {});
+    child.stdin.end(stdin ?? '');
+  });
+}
+
+export const securityCli: CommandRunner = spawnRunner('/usr/bin/security');
 
 /// macOS Keychain via the built-in `security` CLI, so there's no native
 /// dependency. Writes go through `security -i` on stdin: secrets never appear
@@ -44,7 +51,7 @@ export const securityCli: CommandRunner = {
 export class Keychain implements SecretStore {
   constructor(
     private readonly runner: CommandRunner = securityCli,
-    private readonly service: string = SERVICE,
+    private readonly service: string = SECRET_SERVICE,
   ) {}
 
   async get(account: string): Promise<string | null> {
@@ -69,6 +76,6 @@ export class Keychain implements SecretStore {
   }
 }
 
-function assertSafe(value: string): void {
-  if (!SAFE_VALUE.test(value)) throw new AppError('VALIDATION', 'keychain values must be base64/hex/token characters');
+export function assertSafe(value: string): void {
+  if (!SAFE_VALUE.test(value)) throw new AppError('VALIDATION', 'secret values must be base64/hex/token characters');
 }

@@ -2,7 +2,7 @@
 
 > **Living document.** Read this before modifying the module. Update it in the same change whenever the module's behavior, public surface, files, or dependencies change.
 
-**Source:** `src/config/` · **Last verified:** 2026-11-03
+**Source:** `src/config/` · **Last verified:** 2026-11-06
 
 ## Purpose
 
@@ -33,7 +33,8 @@
 
 - `mkdir`'s `mode` is ignored for existing directories, hence the explicit `chmod`.
 - zod 4's `.default()` does not re-parse inner defaults, so `watchDefaults` has a full literal default.
-- Secrets never live in config; they go to the Keychain.
+- Secrets never live in config; they go to the OS secret store (`src/secrets/`).
+- `~/.wasap` comes from `os.homedir()` and the 0700/0600 modes are plain POSIX `chmod`, so paths and permissions behave the same on Linux (paths/config tests pass on Ubuntu 24.04, 2026-11-06).
 
 ## Testing
 

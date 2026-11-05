@@ -1,6 +1,6 @@
 # wasap
 
-wasap is a local daemon that links to your personal WhatsApp account as a linked device (like WhatsApp Desktop), mirrors your chats into a SQLite database on disk, and serves an MCP server on `127.0.0.1` so Claude Code and Claude Desktop can read, triage, answer and organize your conversations. Nothing is hosted: it is one process on your Mac, talking only to WhatsApp.
+wasap is a local daemon that links to your personal WhatsApp account as a linked device (like WhatsApp Desktop), mirrors your chats into a SQLite database on disk, and serves an MCP server on `127.0.0.1` so Claude Code and Claude Desktop can read, triage, answer and organize your conversations. Nothing is hosted: it is one process on your computer (macOS or Linux), talking only to WhatsApp.
 
 > **Status:** early development. Module docs live in [docs/modules](docs/modules/README.md).
 
@@ -8,10 +8,47 @@ wasap is a local daemon that links to your personal WhatsApp account as a linked
 
 ## Requirements
 
-- macOS (secrets are stored in the Keychain through the built-in `security` CLI)
+- macOS (secrets are stored in the Keychain through the built-in `security` CLI) or Linux (secrets go to the system keyring through libsecret's `secret-tool`; see [Linux](#linux))
 - Node >= 22 and [pnpm](https://pnpm.io)
 - [pm2](https://pm2.keymetrics.io) (`npm i -g pm2`) to keep the daemon running
 - WhatsApp on your phone, with a free linked-device slot
+
+## Linux
+
+Tested on Ubuntu 24.04. Everything above applies; the differences are the prerequisites and where secrets live.
+
+**Prerequisites**
+
+```sh
+# Node 22 or newer (Ubuntu's own nodejs package is older), e.g. from NodeSource:
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+corepack enable                     # provides the pnpm version pinned in package.json
+sudo apt install -y libsecret-tools # secret-tool
+sudo apt install -y build-essential python3  # only needed if better-sqlite3 has no prebuilt binary for your system
+npm i -g pm2
+```
+
+wasap stores the session key and the bearer token in the Secret Service keyring (GNOME Keyring on Ubuntu) under the attributes `service wasap`, `account <name>`. It never falls back to plaintext files: if `secret-tool` is missing it stops and tells you to install `libsecret-tools`, and if the keyring can't be reached it stops with secret-tool's reason.
+
+**A keyring must be running and unlocked** in the session that runs wasap (both `login` and the pm2 daemon):
+
+- **Ubuntu desktop:** GNOME Keyring starts and unlocks when you log in to the desktop. Run `wasap login` and `pm2 start` from a terminal inside that session. If `pm2 startup` brings the daemon up at boot before you log in, it can't read the keyring; run `pm2 restart wasap --update-env` from your desktop session after logging in.
+- **Headless server (SSH, no desktop):** there is no D-Bus session or unlocked keyring by default, and secret-tool fails with `Cannot autolaunch D-Bus without X11 $DISPLAY`. Start a session bus and unlock the keyring yourself, then start pm2 from that same shell so the daemon inherits it:
+
+  ```sh
+  sudo apt install -y gnome-keyring dbus-x11
+  dbus-run-session -- bash
+  # inside the new shell; the password protects the keyring file on disk
+  read -rs -p 'keyring password: ' KP && printf '%s' "$KP" | gnome-keyring-daemon --unlock --components=secrets && unset KP
+  pm2 kill   # if a pm2 daemon was already running outside this session
+  node dist/cli.js login
+  pm2 start ecosystem.config.cjs
+  ```
+
+  The keyring stays unlocked only while that session lives, and it has to be unlocked again after a reboot (so `pm2 startup` alone won't bring wasap back). Use `tmux` or `screen` to keep the session around.
+
+Setup is then the same as on macOS: [Install and link](#install-and-link), [Run it](#run-it) and [Connect Claude](#connect-claude).
 
 ## Install and link
 
@@ -42,7 +79,7 @@ The log line `wasap listening on 127.0.0.1` means the MCP server is up; a `whats
 - **Claude Code:** a `claude mcp add --transport http wasap ...` line with the bearer token.
 - **Claude Desktop:** an `mcpServers` entry that goes through `npx mcp-remote`. Desktop's connectors run in Anthropic's cloud and cannot reach `localhost`, so a local stdio bridge is needed.
 
-The bearer token is 64 hex characters, generated on first use and kept in the Keychain. The server only accepts requests whose `Host` is `127.0.0.1:<port>` or `localhost:<port>`, which blocks DNS rebinding from a browser.
+The bearer token is 64 hex characters, generated on first use and kept in the system secret store (Keychain on macOS, the libsecret keyring on Linux). The server only accepts requests whose `Host` is `127.0.0.1:<port>` or `localhost:<port>`, which blocks DNS rebinding from a browser.
 
 ## Permissions (important)
 
@@ -85,7 +122,7 @@ Notes on behavior:
 ## Data and privacy
 
 - Everything lives in `~/.wasap/` (override with `WASAP_HOME`), mode 0700: config, the message store, the encrypted WhatsApp session and the lock file. Back that folder up if you care about local history, watch levels and voice profiles.
-- The WhatsApp session files are encrypted with AES-256-GCM. The key and the bearer token live in the macOS Keychain under the service `wasap`; nothing secret is written to disk in plain text.
+- The WhatsApp session files are encrypted with AES-256-GCM. The key and the bearer token live in the macOS Keychain or the Linux keyring under the service `wasap`; nothing secret is written to disk in plain text.
 - Nothing leaves the machine except WhatsApp traffic. The daemon makes no AI or other third-party API calls. Message text and contact names are never written to logs or to the audit table.
 
 ## Logging out
@@ -100,9 +137,11 @@ node dist/cli.js logout
 ## Troubleshooting
 
 - **`status` shows `logged_out`:** there is no valid link (never linked, logged out, or removed from the phone's Linked devices). The daemon stays up, local reads and `status` still answer, and WhatsApp tools return `LOGGED_OUT`. Run `pm2 stop wasap && node dist/cli.js login --force && pm2 start wasap`.
-- **The session can't be decrypted** (`pm2 logs wasap` shows `the WhatsApp session cannot be decrypted`, `status` shows `logged_out`, and `login` refuses with the same reason): the Keychain key under service `wasap` changed or was deleted, or the files in `~/.wasap/auth/` are corrupted. The daemon keeps serving local reads and never overwrites those files. Run `pm2 stop wasap && node dist/cli.js login --force && pm2 start wasap` to delete them and link again, then remove the old entry from your phone's Linked devices (`--force` can't do that for you).
+- **The session can't be decrypted** (`pm2 logs wasap` shows `the WhatsApp session cannot be decrypted`, `status` shows `logged_out`, and `login` refuses with the same reason): the key under service `wasap` in the Keychain (or Linux keyring) changed or was deleted, or the files in `~/.wasap/auth/` are corrupted. The daemon keeps serving local reads and never overwrites those files. Run `pm2 stop wasap && node dist/cli.js login --force && pm2 start wasap` to delete them and link again, then remove the old entry from your phone's Linked devices (`--force` can't do that for you).
 - **`status` shows `gave_up`:** WhatsApp refused the connection in a way retrying won't fix (for example another client replaced this session). `pm2 logs wasap` names the reason. Check your phone, then `pm2 restart wasap`.
 - **"already running":** run `pm2 stop wasap` before `login` or `logout`, then start it again afterwards.
+- **Linux: `secret-tool not found`:** run `sudo apt install libsecret-tools`.
+- **Linux: `keyring read failed ... Cannot autolaunch D-Bus` or a locked-keyring error:** the process has no D-Bus session or the keyring is locked. See [Linux](#linux).
 - **Port in use:** set `port` in `~/.wasap/config.json` (1024-65535, default 7778), then `pm2 restart wasap` and re-run `wasap token` for the new URL.
 
 ## License
