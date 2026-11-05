@@ -54,7 +54,7 @@ export function createSocket(d: SocketDeps): WASocket {
 
 export const NOT_LINKED = 'WhatsApp is not linked: run `pm2 stop wasap && wasap login && pm2 start wasap`';
 export const UNREADABLE_SESSION =
-  'the WhatsApp session cannot be decrypted (Keychain key changed or files corrupted): run `pm2 stop wasap && wasap login --force && pm2 start wasap`';
+  'the WhatsApp session cannot be decrypted (the key in the system secret store changed or the files are corrupted): run `pm2 stop wasap && wasap login --force && pm2 start wasap`';
 
 export interface GatewayOptions {
   authDir: string;

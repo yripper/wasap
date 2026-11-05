@@ -2,7 +2,7 @@
 
 > **Living document.** Read this before modifying the module. Update it in the same change whenever the module's behavior, public surface, files, or dependencies change.
 
-**Source:** `src/whatsapp/` · **Last verified:** 2026-11-03
+**Source:** `src/whatsapp/` · **Last verified:** 2026-11-06
 
 ## Purpose
 
@@ -15,7 +15,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 | `src/whatsapp/types.ts` | `WaChat`, `WaMessage`, `WaEvent`, `ConnectionState`, `WhatsAppGateway` (no Baileys types leak) |
 | `src/whatsapp/adapt.ts` | Baileys `WAMessage`/`Chat`/`Contact` to domain events |
 | `src/whatsapp/auth-state.ts` | `useEncryptedAuthState`: AES-GCM file-per-key auth store |
-| `src/whatsapp/session-crypto.ts` | `SessionCrypto` (AES-256-GCM) and `loadOrCreateAuthKey` (Keychain-backed key) |
+| `src/whatsapp/session-crypto.ts` | `SessionCrypto` (AES-256-GCM) and `loadOrCreateAuthKey` (key in the OS secret store) |
 | `src/whatsapp/backoff.ts` | Reconnect delay schedule |
 | `src/whatsapp/connection.ts` | `ReconnectController`: reconnect policy (stable-open reset, never gives up on retry-class closes), Baileys-free |
 | `src/whatsapp/events.ts` | Pure Baileys event payload to `WaEvent[]` mapping, `closeReason` |
@@ -54,7 +54,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 - `createSocket` `gateway.ts:32`, socket options and why:
   - `auth` with `makeCacheableSignalKeyStore` over the encrypted store (avoids a disk read+decrypt per signal key).
   - `markOnlineOnConnect: false`: the phone keeps getting notifications and contacts don't see us online.
-  - `syncFullHistory: true` + `browser: Browsers.macOS('Chrome')`: Baileys only sets the desktop `webSubPlatform` (which makes the phone send full history instead of ~3 months) for a 'Desktop' browser string (`Utils/validate-connection.ts` `getWebInfo`), but WhatsApp now closes the socket with 428 before any QR for 'Desktop' strings (checked 2026-11-03, rc14), so wasap uses Baileys' default and gets the phone's normal (~3 month) history. `syncFullHistory` is still sent as `requireFullSync` in the pairing payload, so login must use the same options (hence the shared builder).
+  - `syncFullHistory: true` + `browser: Browsers.macOS('Chrome')`: Baileys only sets the desktop `webSubPlatform` (which makes the phone send full history instead of ~3 months) for a 'Desktop' browser string (`Utils/validate-connection.ts` `getWebInfo`), but WhatsApp now closes the socket with 428 before any QR for 'Desktop' strings (checked 2026-11-03, rc14), so wasap uses Baileys' default and gets the phone's normal (~3 month) history. `syncFullHistory` is still sent as `requireFullSync` in the pairing payload, so login must use the same options (hence the shared builder). `Browsers.macOS('Chrome')` is only the client identity shown under Linked devices; it is kept as is on Linux (changing it could change pairing behavior).
   - `shouldSyncHistoryMessage: () => true`: process every history chunk type.
   - `getMessage`: returns `{ conversation: text }` from the store so retry receipts (peer asks us to re-encrypt a sent message) work; `undefined` when unknown.
   - `logger`: `quietBaileysLogger(parent)` (`baileys-logger.ts:33`). Baileys' own warn/error calls carry JIDs, push names and whole decoded stanzas (`binaryNodeToString` in `Socket/messages-recv`) in the merge object and sometimes JIDs in the message string, and pino child loggers can't take `hooks`. So the wrapper drops trace/debug/info, drops the merge object (keeping only an error's class name as `errName`), masks JIDs as `[jid]` and digit runs of 5+ as `[num]` in the message, and returns itself from `child()` (child bindings carry JIDs too). The parent's level still applies, so login's silent logger stays silent. Chosen over `silent` so a decrypt/sync failure still leaves a level + reason line in `pm2 logs`.

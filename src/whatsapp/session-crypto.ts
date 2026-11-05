@@ -33,7 +33,7 @@ export class SessionCrypto {
   }
 }
 
-/// The key lives in the Keychain, never on disk next to the encrypted session files.
+/// The key lives in the OS secret store (Keychain or libsecret keyring), never on disk next to the encrypted session files.
 export async function loadOrCreateAuthKey(secrets: SecretStore): Promise<SessionCrypto> {
   const existing = await secrets.get(SECRET_ACCOUNTS.authKey);
   if (existing !== null) {

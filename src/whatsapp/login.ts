@@ -104,7 +104,7 @@ export function loginFailureMessage(r: { code: number | null; name: string }): s
 
 export type LinkStatus = 'linked' | 'not_linked' | 'unreadable';
 
-/// `unreadable`: files exist but can't be decrypted or parsed (Keychain key changed,
+/// `unreadable`: files exist but can't be decrypted or parsed (secret-store key changed,
 /// corrupted files). Never treated as `not_linked`: that would silently start blank creds.
 export async function linkStatus(authDir: string, crypto: SessionCrypto): Promise<LinkStatus> {
   try {
