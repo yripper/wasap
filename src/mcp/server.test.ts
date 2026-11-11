@@ -120,6 +120,15 @@ describe('MCP tools', () => {
     expect((await json<{ items: unknown[] }>('get_pending')).items).toEqual([]);
   });
 
+  it('send_message to a new phone number stores the chat for the other tools', async () => {
+    const NEW = '1110000001@s.whatsapp.net';
+    made.t.gateway.onWhatsAppNumbers.add(NEW);
+    expect(await json('send_message', { chat_id: '+111 000 0001', text: 'first message' })).toMatchObject({ chatId: NEW });
+    expect(await json('read_history', { chat_id: NEW })).toMatchObject([{ text: 'first message' }]);
+    expect((await call('get_voice', { chat_id: NEW })).text.startsWith('NOT_FOUND')).toBe(false);
+    expect((await call('send_message', { chat_id: '+222 000 0002', text: 'x' })).text).toMatch(/^NOT_FOUND:.*not on WhatsApp/);
+  });
+
   it('list_chats hides muted chats unless watch_level is given', async () => {
     made.t.chats.setWatchLevel(GROUP2, 'muted');
     expect((await json<{ id: string }[]>('list_chats', { kind: 'group' })).map((c) => c.id)).toEqual([GROUP]);

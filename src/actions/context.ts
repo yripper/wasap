@@ -1,5 +1,6 @@
 import { AppError } from '../domain/errors.js';
 import type { Acquire, PerKeyGap, RateLimiter } from '../domain/rate-limiter.js';
+import type { AliasesRepo } from '../store/aliases-repo.js';
 import type { AuditRepo } from '../store/audit-repo.js';
 import type { ChatsRepo } from '../store/chats-repo.js';
 import type { CleanupPlansRepo } from '../store/cleanup-plans-repo.js';
@@ -12,6 +13,8 @@ export interface ActionDeps {
   gateway: WhatsAppGateway;
   sink: Sink;
   chats: ChatsRepo;
+  /** Lets a phone number find a chat stored under its @lid. */
+  aliases: AliasesRepo;
   messages: MessagesRepo;
   audit: AuditRepo;
   plans: CleanupPlansRepo;

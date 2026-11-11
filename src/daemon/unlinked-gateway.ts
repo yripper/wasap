@@ -17,6 +17,7 @@ export function createUnlinkedGateway(reason: string = NOT_LINKED): WhatsAppGate
     setMuted: reject,
     leaveGroup: reject,
     groupTitle: reject,
+    onWhatsApp: reject,
     state: () => 'logged_out',
     stop: async () => {},
   };

@@ -5,6 +5,8 @@ export class FakeGateway implements WhatsAppGateway {
   readonly calls: { method: string; args: unknown[] }[] = [];
   readonly failOn = new Map<string, Error>();
   readonly groupTitles = new Map<string, string>();
+  /** Phone JIDs that `onWhatsApp` reports as having an account; everything else has none. */
+  readonly onWhatsAppNumbers = new Set<string>();
   connection: ConnectionState = 'open';
   private handlers: ((e: WaEvent) => void)[] = [];
   private nextId = 1;
@@ -51,6 +53,11 @@ export class FakeGateway implements WhatsAppGateway {
   async groupTitle(chatId: string): Promise<string | null> {
     this.record('groupTitle', [chatId]);
     return this.groupTitles.get(chatId) ?? null;
+  }
+
+  async onWhatsApp(phoneJid: string): Promise<string | null> {
+    this.record('onWhatsApp', [phoneJid]);
+    return this.onWhatsAppNumbers.has(phoneJid) ? phoneJid : null;
   }
 
   state(): ConnectionState {

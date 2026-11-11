@@ -35,6 +35,8 @@ export interface WhatsAppGateway {
   setMuted(chatId: string, untilSec: number | null): Promise<void>;
   leaveGroup(chatId: string): Promise<void>;
   groupTitle(chatId: string): Promise<string | null>;
+  /// The JID WhatsApp knows for a phone-number JID, or null when the number has no account.
+  onWhatsApp(phoneJid: string): Promise<string | null>;
   state(): ConnectionState;
   /// Closes the connection for good (daemon shutdown); no reconnect afterwards.
   stop(): Promise<void>;

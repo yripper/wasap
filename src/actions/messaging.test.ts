@@ -22,7 +22,7 @@ beforeEach(() => {
 describe('sendMessage', () => {
   it('sends, marks the prior latest message read, stores the row and clears unread', async () => {
     const res = await sendMessage(t.deps, DM, 'hello');
-    expect(res).toEqual({ waId: 'SENT1', markedRead: true });
+    expect(res).toEqual({ chatId: DM, waId: 'SENT1', markedRead: true });
     expect(t.gateway.callsTo('sendText')).toEqual([[DM, 'hello', undefined]]);
     expect(t.gateway.callsTo('markRead')).toEqual([[DM, { waId: 'IN1', fromMe: false, ts: 100, senderJid: DM }]]);
     expect(t.messages.history(DM, { limit: 1 })[0]).toMatchObject({ waId: 'SENT1', fromMe: true, senderJid: null, text: 'hello', sentViaWasap: true });

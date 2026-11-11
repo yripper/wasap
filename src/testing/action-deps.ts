@@ -24,6 +24,7 @@ export function makeActionDeps(over: { sendsPerMinute?: number; destructivePerMi
   const chats = new ChatsRepo(db, () => 'normal');
   const messages = new MessagesRepo(db);
   const gateway = new FakeGateway();
+  const aliases = new AliasesRepo(db);
   // ~115 days after the epoch, so "inactive for N days" criteria have room to match.
   const clock = { ms: 10_000_000_000 };
   const nowMs = (): number => clock.ms;
@@ -33,8 +34,9 @@ export function makeActionDeps(over: { sendsPerMinute?: number; destructivePerMi
   const sleeps: number[] = [];
   const deps: ActionDeps = {
     gateway,
-    sink: new Sink({ db, chats, messages, aliases: new AliasesRepo(db), contacts: new ContactsRepo(db), now: nowSec }),
+    sink: new Sink({ db, chats, messages, aliases, contacts: new ContactsRepo(db), now: nowSec }),
     chats,
+    aliases,
     messages,
     audit,
     plans: new CleanupPlansRepo(db),

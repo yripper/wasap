@@ -2,7 +2,7 @@
 
 > **Living document.** Read this before modifying the module. Update it in the same change whenever the module's behavior, public surface, files, or dependencies change.
 
-**Source:** `src/whatsapp/` · **Last verified:** 2026-11-06
+**Source:** `src/whatsapp/` · **Last verified:** 2026-11-11
 
 ## Purpose
 
@@ -27,7 +27,7 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
 
 ## Public surface
 
-- `WhatsAppGateway` (`types.ts:29`): `onEvent`, `sendText`, `markRead`, `setArchived`, `setMuted`, `leaveGroup`, `groupTitle`, `state`, `stop` (`types.ts:39`, daemon shutdown). Every `chatId` argument is the chat's raw WhatsApp JID (`ChatRow.waJid`, see actions.md), and `MessageKeyRef.senderJid` is the raw sender JID: the gateway forwards both verbatim into stanzas and app-state patches.
+- `WhatsAppGateway` (`types.ts:29`): `onEvent`, `sendText`, `markRead`, `setArchived`, `setMuted`, `leaveGroup`, `groupTitle`, `onWhatsApp` (`types.ts:39`), `state`, `stop` (`types.ts:42`, daemon shutdown). Every `chatId` argument is the chat's raw WhatsApp JID (`ChatRow.waJid`, see actions.md), and `MessageKeyRef.senderJid` is the raw sender JID: the gateway forwards both verbatim into stanzas and app-state patches.
 - `WaMessage` (`types.ts:16`) is `NewMessage` minus `sentViaWasap` plus `senderAltJid` and an optional `pushName` (sender's profile name, incoming only, trimmed, omitted when empty); `chatId` is as Baileys gave it (may be `@lid`).
 - `MessageKeyRef` is re-exported from `src/store/types.ts`.
 - `BaileysGateway.start({ authDir, crypto, getMessageText, logger })` (`gateway.ts:95`) and `stop()` (`gateway.ts:108`). `start` throws `AUTH_REQUIRED` with `NOT_LINKED` (`gateway.ts:53`) when creds have no `me`, and with `UNREADABLE_SESSION` (`gateway.ts:54`) plus `describeError` when the auth state can't be decrypted.
@@ -58,22 +58,23 @@ The only place that imports `@whiskeysockets/baileys`. Converts Baileys objects 
   - `shouldSyncHistoryMessage: () => true`: process every history chunk type.
   - `getMessage`: returns `{ conversation: text }` from the store so retry receipts (peer asks us to re-encrypt a sent message) work; `undefined` when unknown.
   - `logger`: `quietBaileysLogger(parent)` (`baileys-logger.ts:33`). Baileys' own warn/error calls carry JIDs, push names and whole decoded stanzas (`binaryNodeToString` in `Socket/messages-recv`) in the merge object and sometimes JIDs in the message string, and pino child loggers can't take `hooks`. So the wrapper drops trace/debug/info, drops the merge object (keeping only an error's class name as `errName`), masks JIDs as `[jid]` and digit runs of 5+ as `[num]` in the message, and returns itself from `child()` (child bindings carry JIDs too). The parent's level still applies, so login's silent logger stays silent. Chosen over `silent` so a decrypt/sync failure still leaves a level + reason line in `pm2 logs`.
-- Event processing (`connect`, `gateway.ts:197`): each `ev.process` batch runs three steps, each wrapped in `guardEvents` (`events.ts:105`): creds save, data mapping (`handleData` `gateway.ts:221`), connection handling. Baileys' `ev.process` awaits the handler without catching (`Utils/event-buffer.ts` `process`), so an uncaught throw would be an unhandledRejection that crashes the daemon. A failure is logged at `error` with `describeError` only, and one failed step doesn't skip the others (a bad creds write must not hide a close).
+- Event processing (`connect`, `gateway.ts:205`): each `ev.process` batch runs three steps, each wrapped in `guardEvents` (`events.ts:105`): creds save, data mapping (`handleData` `gateway.ts:229`), connection handling. Baileys' `ev.process` awaits the handler without catching (`Utils/event-buffer.ts` `process`), so an uncaught throw would be an unhandledRejection that crashes the daemon. A failure is logged at `error` with `describeError` only, and one failed step doesn't skip the others (a bad creds write must not hide a close).
 - Event mapping (`events.ts`):
   - `messaging-history.set` → `mapHistorySet` (`events.ts:49`): `aliases` (from `lidPnMappings` when present, else chats' `lidJid`/`pnJid`, plus contacts' lid/pn; deduped), `contacts`, `chats` (history source), `messages`, then edit/revoke events. Aliases go first so ids can be resolved before storing.
   - `chats.upsert` → `chats` (history source); `chats.update` → `chats` (update source); `mapChats` `events.ts:30` skips entries without `id`.
   - `messages.upsert` (both `notify` and `append`) → `mapMessages` `events.ts:18`: one merged `messages` event plus separate `edit`/`revoke`.
   - `contacts.upsert`/`contacts.update` → `mapContacts` `events.ts:41`: `contacts` with `name ?? notify` only, plus any `aliases` the contacts carry.
-  - `connection.update` `gateway.ts:233`: `open` → controller `handleOpen`, state `open`, then `groupFetchAllParticipating` once → `mapGroups` (`events.ts:62`, `unread: null`, `archived: null`, `mutedUntil: undefined`). `close` → `closeReason` (`events.ts:96`, Boom `output.statusCode` → `{ kind, code, name }`, logged at warn), classified by `classifyClose` (`events.ts:87`):
+  - `connection.update` `gateway.ts:241`: `open` → controller `handleOpen`, state `open`, then `groupFetchAllParticipating` once → `mapGroups` (`events.ts:62`, `unread: null`, `archived: null`, `mutedUntil: undefined`). `close` → `closeReason` (`events.ts:96`, Boom `output.statusCode` → `{ kind, code, name }`, logged at warn), classified by `classifyClose` (`events.ts:87`):
     - `logged_out` (401): emits `logged_out`, ends the socket, then `clear()`s the auth dir.
     - `terminal`: 440 `connectionReplaced`, 403 `forbidden`, 500 `badSession`, 411 `multideviceMismatch`. Emits `gave_up` with no retry, and the auth dir is kept. This is for ban safety: retrying fights another session or repeats a server refusal.
     - `restart_required` (515) and `retry` (all other codes, or none): exponential backoff through the controller, then retries every ~`capMs` indefinitely.
   - `creds.update` → `saveCreds()`.
-- `markRead` `gateway.ts:131`: always `chatModify({ markRead: true, lastMessages: [minimal] })`; `readMessages([key])` (blue ticks) only when `last.fromMe === false`. `minimal` (`gateway.ts:275`) is `{ key: { remoteJid, id, fromMe, participant? }, messageTimestamp }`, matching Baileys' `MinimalMessage = Pick<WAMessage, 'key' | 'messageTimestamp'>`; `participant` = `senderJid` for groups only.
+- `markRead` `gateway.ts:133`: always `chatModify({ markRead: true, lastMessages: [minimal] })`; `readMessages([key])` (blue ticks) only when `last.fromMe === false`. `minimal` (`gateway.ts:283`) is `{ key: { remoteJid, id, fromMe, participant? }, messageTimestamp }`, matching Baileys' `MinimalMessage = Pick<WAMessage, 'key' | 'messageTimestamp'>`; `participant` = `senderJid` for groups only.
 - `setArchived` `gateway.ts:140`: `chatModify({ archive, lastMessages: [minimal] })`.
 - `setMuted` `gateway.ts:146`: `chatModify({ mute: toMuteMs(untilSec) })`. Baileys copies `mute` verbatim into the absolute `muteAction.muteEndTimestamp` (`Utils/chat-utils.ts` `chatModificationToAppPatch`). The Baileys README's "mute for 8 hours: `8*60*60*1000`" example reads as a duration, which is misleading.
-- `sendText` `gateway.ts:124`: returns `{ waId: sent.key.id, ts: toNumber(sent.messageTimestamp) }`. A quote needs `quoted.message` (Baileys builds `contextInfo.quotedMessage` from it and crashes without one), so `quotedMessage` (`gateway.ts:171`) fills `{ conversation: storedText ?? '' }`.
-- `groupTitle` `gateway.ts:154`: `groupMetadata(chatId).subject`, `null` on error.
+- `sendText` `gateway.ts:126`: returns `{ waId: sent.key.id, ts: toNumber(sent.messageTimestamp) }`. A quote needs `quoted.message` (Baileys builds `contextInfo.quotedMessage` from it and crashes without one), so `quotedMessage` (`gateway.ts:179`) fills `{ conversation: storedText ?? '' }`.
+- `onWhatsApp` `gateway.ts:165`: Baileys `sock.onWhatsApp(phoneJid)`, returns the first result with `exists` or `null`. Baileys filters numbers without an account out of the list (and can return `undefined`), so both mean "not on WhatsApp". Only for phone JIDs: Baileys skips `@lid` input.
+- `groupTitle` `gateway.ts:156`: `groupMetadata(chatId).subject`, `null` on error.
 - `runLogin` `login.ts:24`: prints QR with `qrcode-terminal` `{ small: true }`; on `open` waits for pending creds writes, ends the socket and resolves; one `restartRequired` (515) after pairing reconnects immediately (protocol, not a failure), a second rejects. `loggedOut` clears stale creds and rejects `LOGGED_OUT`; other closes reject `AUTH_REQUIRED` with `loginFailureMessage` (`login.ts:98`): 408 says the QR expired, any other code names the reason and code (e.g. `connectionClosed, 428`), and no code says the connection dropped. The old generic "QR expired or connection lost" hid the 428 that a rejected browser string causes. The stored creds-save chain has a no-op `.catch` so an early failure surfaces as `INTERNAL` from `finish`, not as an unhandledRejection.
 
 ## Dependencies
@@ -90,11 +91,11 @@ Baileys (`makeWASocket`, `makeCacheableSignalKeyStore`, `Browsers`, `DisconnectR
 - A wrong auth key makes `useEncryptedAuthState` throw (GCM auth failure); never fall back to fresh creds on that error or the paired session is lost.
 - Never log message text or names.
 - `runLogout` does not save creds updates from its short-lived socket; the files are wiped right after. It clears locally even when the remote logout fails, so the phone may still list the device (the CLI tells the user to remove it there).
-- **Gateway state**: methods throw `AppError('LOGGED_OUT')` when logged out and `AppError('INTERNAL', 'not connected (state: …)')` for any other non-`open` state (`gateway.ts:165`). `groupTitle` throws too when not open (only Baileys errors become `null`).
+- **Gateway state**: methods throw `AppError('LOGGED_OUT')` when logged out and `AppError('INTERNAL', 'not connected (state: …)')` for any other non-`open` state (`gateway.ts:171`). `groupTitle` throws too when not open (only Baileys errors become `null`).
 - `start` throws `AUTH_REQUIRED` when the creds have no `me` (never paired) or can't be decrypted (the files are not touched; recovery is `wasap login --force`). It resolves once the socket is created, not when it opens; register `onEvent` right after `start` resolves (events are network-driven, so none fire before then).
 - `logged_out` and `gave_up` are terminal for the process: nothing reconnects until the daemon restarts (after `wasap login` for the former). `gave_up` comes only from a terminal close code (the warn log names it); network-style failures stay in `reconnecting`. A 515 on the daemon's socket is handled by the normal backoff (first retry ~2s).
 - On `loggedOut` the order is: emit `logged_out`, end socket, then `clear()`; clearing first lets a queued `creds.update` write recreate files.
-- Events from a replaced socket are ignored (`sock !== this.sock` guard in `connect`, `gateway.ts:216`).
+- Events from a replaced socket are ignored (`sock !== this.sock` guard in `connect`, `gateway.ts:224`).
 - The reconnect sleep timer is unref'd so a pending retry never keeps a stopping process alive.
 - **Login and history**: the login socket ends right after `open`. History chunks it already processed in that window are dropped (no one listens); unprocessed ones are redelivered to the daemon's socket. Verify in the live run.
 - `messaging-history.set` field names match the brief (`chats`, `contacts`, `messages`, `lidPnMappings?` — `Types/Events.d.ts:18`). Baileys' own `Utils/history` already merges chat `lidJid`/`pnJid` into `lidPnMappings`, so the chats fallback only matters when the field is absent.

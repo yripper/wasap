@@ -162,6 +162,12 @@ export class BaileysGateway implements WhatsAppGateway {
     }
   }
 
+  async onWhatsApp(phoneJid: string): Promise<string | null> {
+    // Baileys drops numbers without an account from the list (and may return undefined).
+    const found = await this.openSocket().onWhatsApp(phoneJid);
+    return found?.find((r) => r.exists)?.jid ?? null;
+  }
+
   private openSocket(): WASocket {
     if (this.current === 'logged_out') throw new AppError('LOGGED_OUT', 'WhatsApp logged this device out; run `wasap login`');
     if (this.current !== 'open' || !this.sock) throw new AppError('INTERNAL', `WhatsApp is not connected (state: ${this.current})`);

@@ -120,6 +120,7 @@ function toolDeps(db: Db, store: Store, gateway: WhatsAppGateway, config: Config
     gateway,
     sink: store.sink,
     chats: store.chats,
+    aliases: store.aliases,
     messages: store.messages,
     audit: new AuditRepo(db),
     plans: new CleanupPlansRepo(db),
